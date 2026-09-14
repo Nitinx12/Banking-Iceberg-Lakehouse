@@ -1,0 +1,19 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# secrets — stand-in for Databricks Secrets + KMS (README §3)
+.env
+
+# landing / checkpoints
+landing/
+checkpoints/
+.mnt/
+requirements.txt

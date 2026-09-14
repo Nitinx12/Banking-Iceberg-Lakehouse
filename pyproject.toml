@@ -17,8 +17,8 @@ dependencies = [
     "ruff>=0.16.7",
 ]
 
-[project.scripts]
-streamflix-lakehouse = "streamflix_lakehouse:main"
+[tool.uv]
+package = false
 
 [tool.ruff]
 exclude = ["notebooks"]

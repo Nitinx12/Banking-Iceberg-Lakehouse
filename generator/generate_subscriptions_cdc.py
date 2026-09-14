@@ -48,7 +48,9 @@ def generate_subscriptions_cdc(
 
         prev_plan = plan
         for _ in range(random.randint(0, events_per_user - 1)):
-            ts = ts + timedelta(days=random.randint(1, 60), seconds=random.randint(0, 86400))
+            ts = ts + timedelta(
+                days=random.randint(1, 60), seconds=random.randint(0, 86400)
+            )
             new_plan = random.choice(PLAN_TIERS)
             event_type = random.choices(EVENT_TYPES, weights=[0.1, 0.8, 0.1])[0]
             status = random.choice(STATUSES) if event_type != "delete" else "canceled"

@@ -1,9 +1,12 @@
-"""Central logger — respects LOG_LEVEL / DEBUG_MODE from .env / src/config.py."""
+"""Central logger — rich-formatted, respects LOG_LEVEL / DEBUG_MODE from .env / src/config.py."""
 
 from __future__ import annotations
 
 import logging
-import sys
+
+from rich.logging import RichHandler
+
+from src.utils.console import console
 
 
 def get_logger(name: str = "streamflix") -> logging.Logger:
@@ -21,11 +24,16 @@ def get_logger(name: str = "streamflix") -> logging.Logger:
         logger.setLevel(level)
         return logger
 
-    handler = logging.StreamHandler(sys.stdout)
-    fmt = "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
-    if cfg.debug_mode:
-        fmt = "%(asctime)s | %(levelname)-7s | %(name)s:%(lineno)d | %(message)s"
-    handler.setFormatter(logging.Formatter(fmt, datefmt="%Y-%m-%d %H:%M:%S"))
+    # RichHandler routes through the shared console, so log lines stack neatly
+    # on top of any live progress display instead of breaking it.
+    handler = RichHandler(
+        console=console,
+        show_time=True,
+        show_path=cfg.debug_mode,
+        rich_tracebacks=True,
+        tracebacks_show_locals=False,
+        markup=False,
+    )
     logger.addHandler(handler)
     logger.setLevel(level)
     logger.propagate = False

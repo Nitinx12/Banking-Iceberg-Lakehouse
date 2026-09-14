@@ -39,7 +39,11 @@ def get_sql_connection() -> Any:
         from src.config import get_config
 
         cfg = get_config()
-        if not cfg.databricks_host or not cfg.databricks_http_path or not cfg.databricks_token:
+        if (
+            not cfg.databricks_host
+            or not cfg.databricks_http_path
+            or not cfg.databricks_token
+        ):
             raise RuntimeError("Missing DATABRICKS_HOST/HTTP_PATH/TOKEN — check .env")
         host = cfg.databricks_host.replace("https://", "").rstrip("/")
         return dbsql.connect(
@@ -48,4 +52,6 @@ def get_sql_connection() -> Any:
             access_token=cfg.databricks_token,
         )
     except ImportError as e:
-        raise ImportError("databricks-sql-connector not installed — run `uv add databricks-sql-connector`") from e
+        raise ImportError(
+            "databricks-sql-connector not installed — run `uv add databricks-sql-connector`"
+        ) from e

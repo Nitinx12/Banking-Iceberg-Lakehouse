@@ -1,0 +1,38 @@
+{
+  "expectation_suite_name": "support_tickets",
+  "data_asset_type": null,
+  "expectations": [
+    {
+      "expectation_type": "expect_column_values_to_not_be_null",
+      "kwargs": { "column": "ticket_id" },
+      "meta": { "reason": "PK null — quarantine" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": { "column": "status", "value_set": ["open", "pending", "resolved", "closed"] },
+      "meta": { "reason": "invalid status — quarantine" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_in_set",
+      "kwargs": { "column": "channel", "value_set": ["chat", "email", "phone"] },
+      "meta": { "reason": "invalid channel — quarantine" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_between",
+      "kwargs": { "column": "csat_score", "min_value": 1, "max_value": 5, "mostly": 0.7 },
+      "meta": { "reason": "csat null until resolved/closed; out of range (generator 0.5%) — quarantine" }
+    },
+    {
+      "expectation_type": "expect_column_values_to_be_unique",
+      "kwargs": { "column": "ticket_id" },
+      "meta": { "reason": "duplicate ticket_id (generator 0.2%) — quarantine" }
+    }
+  ],
+  "meta": {
+    "great_expectations_version": "1.23.0",
+    "streamflix_layer": "silver",
+    "quarantine_table": "silver.quarantine",
+    "semi_structured": "payload JSON parsed via from_json in clean_support_tickets; unparseable_payload quarantined"
+  },
+  "ge_cloud_id": null
+}

@@ -13,7 +13,16 @@ fake = Faker()
 Faker.seed(42)
 random.seed(42)
 
-GENRES = ["Drama", "Comedy", "Action", "Sci-Fi", "Documentary", "Horror", "Romance", "Thriller"]
+GENRES = [
+    "Drama",
+    "Comedy",
+    "Action",
+    "Sci-Fi",
+    "Documentary",
+    "Horror",
+    "Romance",
+    "Thriller",
+]
 CONTENT_TYPES = ["movie", "series"]
 RATINGS = ["G", "PG", "PG-13", "R", "NC-17"]
 

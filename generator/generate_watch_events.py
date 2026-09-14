@@ -26,11 +26,13 @@ def generate_watch_events(
     """Messiness injected: duplicates, late arrivals, nulls, out-of-order timestamps."""
     user_ids = [f"user_{i:06d}" for i in range(n_users)]
     content_ids = [f"ct_{i:06d}" for i in range(n_content)]
-    base = datetime.now(tz=UTC) - timedelta(days=30)
+    # 5-day window: matches the silver freshness gate (late_arriving_7d), so the
+    # deliberate -7d "late" messiness is what trips the flag, not normal history
+    base = datetime.now(tz=UTC) - timedelta(days=5)
 
     rows: list[dict] = []
     for _ in range(n):
-        ts = base + timedelta(seconds=random.randint(0, 30 * 86400))
+        ts = base + timedelta(seconds=random.randint(0, 5 * 86400))
         row: dict = {
             "event_id": f"evt_{uuid.uuid4().hex}",
             "user_id": random.choice(user_ids),

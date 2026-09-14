@@ -27,9 +27,14 @@ try:
     from dotenv import load_dotenv
 
     # Load from repo root .env if present; no-op on cluster where file absent
-    load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=False)
+    load_dotenv(
+        dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=False
+    )
 except ImportError:
     pass
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 @dataclass(frozen=True)
@@ -42,13 +47,14 @@ class Config:
     landing_root: str
     checkpoint_root: str
     quarantine_path: str
-    catalog_name: str  # streamflix-lakehouse (UC)
+    catalog_name: str  # streamflix-lakehouse (UC); "" on local runs
     bronze_schema: str
     silver_schema: str
     gold_schema: str
     init_schema: str  # sql/init_schema.sql
     audit_table: str
     lineage_table: str
+    warehouse_dir: str | None  # local runs keep the warehouse under .spark/
     quality_threshold: float
     max_fail_count: int
     spark_shuffle_partitions: int
@@ -78,7 +84,8 @@ class Config:
         return f"{self.catalog_name}.{self.init_schema}"
 
     def fqn(self, schema: str, table: str) -> str:
-        return f"`{self.catalog_name}`.{schema}.{table}"
+        prefix = f"`{self.catalog_name}`." if self.catalog_name else ""
+        return f"{prefix}{schema}.{table}"
 
     @property
     def is_local(self) -> bool:
@@ -142,27 +149,71 @@ def get_config() -> Config:
     silver = _get("SILVER_SCHEMA") or _get("CATALOG_SILVER", "silver") or "silver"
     gold = _get("GOLD_SCHEMA") or _get("CATALOG_GOLD", "gold") or "gold"
     init = _get("INIT_SCHEMA") or _get("CATALOG_SCHEMA", "init_schema") or "init_schema"
-    catalog = _get("CATALOG_NAME", "streamflix-lakehouse") or "streamflix-lakehouse"
     env = _get("ENVIRONMENT") or _get("ENV", "dev") or "dev"
+
+    # Local runs (no Databricks runtime): .env targets the CE workspace, so we
+    # deliberately ignore its Databricks paths/catalog and use repo-local ones —
+    # landing/ for sources, .spark/ for warehouse + checkpoints, Hive-style
+    # two-part table names (bronze.watch_events) instead of UC three-part.
+    local = "DATABRICKS_RUNTIME_VERSION" not in os.environ
+    if local:
+        catalog = ""
+        landing_root = str(_REPO_ROOT / "landing")
+        checkpoint_root = str(_REPO_ROOT / ".spark" / "checkpoints")
+        quarantine_path = str(_REPO_ROOT / ".spark" / "quarantine")
+        warehouse_dir = str(_REPO_ROOT / ".spark" / "warehouse")
+        audit_table = "silver.audit_log"
+        lineage_table = "init_schema.lineage"
+        shuffle_default = 8  # small data, snappy local runs
+    else:
+        catalog = _get("CATALOG_NAME", "streamflix-lakehouse") or "streamflix-lakehouse"
+        landing_root = (
+            _get("RAW_DATA_PATH")
+            or _get("LANDING_ROOT", "/Volumes/streamflix-lakehouse/bronze/raw_data")
+            or "/Volumes/streamflix-lakehouse/bronze/raw_data"
+        )
+        checkpoint_root = (
+            _get("CHECKPOINT_PATH")
+            or _get(
+                "CHECKPOINT_ROOT", "/Volumes/streamflix-lakehouse/bronze/checkpoints"
+            )
+            or "/Volumes/streamflix-lakehouse/bronze/checkpoints"
+        )
+        quarantine_path = (
+            _get("QUARANTINE_PATH", "/Volumes/streamflix-lakehouse/silver/quarantine")
+            or "/Volumes/streamflix-lakehouse/silver/quarantine"
+        )
+        warehouse_dir = None
+        audit_table = (
+            _get("AUDIT_TABLE", f"{catalog}.silver.audit_log")
+            or f"{catalog}.silver.audit_log"
+        )
+        lineage_table = (
+            _get("LINEAGE_TABLE", f"{catalog}.init_schema.lineage")
+            or f"{catalog}.init_schema.lineage"
+        )
+        shuffle_default = 200
+
     return Config(
         env=env,
         databricks_host=_get("DATABRICKS_HOST"),
         databricks_token=_get("DATABRICKS_TOKEN"),
         databricks_workspace_id=_get("DATABRICKS_WORKSPACE_ID"),
         databricks_http_path=_get("DATABRICKS_HTTP_PATH"),
-        landing_root=_get("RAW_DATA_PATH") or _get("LANDING_ROOT", "/Volumes/streamflix-lakehouse/bronze/raw_data") or "/Volumes/streamflix-lakehouse/bronze/raw_data",
-        checkpoint_root=_get("CHECKPOINT_PATH") or _get("CHECKPOINT_ROOT", "/Volumes/streamflix-lakehouse/bronze/checkpoints") or "/Volumes/streamflix-lakehouse/bronze/checkpoints",
-        quarantine_path=_get("QUARANTINE_PATH", "/Volumes/streamflix-lakehouse/silver/quarantine") or "/Volumes/streamflix-lakehouse/silver/quarantine",
+        landing_root=landing_root,
+        checkpoint_root=checkpoint_root,
+        quarantine_path=quarantine_path,
         catalog_name=catalog,
         bronze_schema=bronze,
         silver_schema=silver,
         gold_schema=gold,
         init_schema=init,
-        audit_table=_get("AUDIT_TABLE", f"{catalog}.silver.audit_log") or f"{catalog}.silver.audit_log",
-        lineage_table=_get("LINEAGE_TABLE", f"{catalog}.init_schema.lineage") or f"{catalog}.init_schema.lineage",
+        audit_table=audit_table,
+        lineage_table=lineage_table,
+        warehouse_dir=warehouse_dir,
         quality_threshold=_get_float("QUALITY_THRESHOLD", 0.95),
         max_fail_count=_get_int("MAX_FAIL_COUNT", 100),
-        spark_shuffle_partitions=_get_int("SPARK_SHUFFLE_PARTITIONS", 200),
+        spark_shuffle_partitions=_get_int("SPARK_SHUFFLE_PARTITIONS", shuffle_default),
         spark_adaptive_enabled=_get_bool("SPARK_SQL_ADAPTIVE_ENABLED", True),
         log_level=_get("LOG_LEVEL", "INFO") or "INFO",
         debug_mode=_get_bool("DEBUG_MODE", False),

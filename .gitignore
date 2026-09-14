@@ -18,6 +18,10 @@ checkpoints/
 .mnt/
 requirements.txt
 
+# local pipeline run artifacts (uv run python main.py pipeline)
+.spark/
+spark-warehouse/
+
 # GX / caches
 gx/uncommitted/
 .pytest_cache/

@@ -8,8 +8,8 @@ Local:  uv run python main.py pipeline
         uv run python main.py generate --rows 10000
 CE:     Databricks Job spark_python_task: main.py pipeline
 
-Fixes: catalog fallback (workspace vs streamflix-lakehouse), token scope warnings,
-organized src/core vs src/jobs vs src/utils, GX suites, Makefile parity.
+Local runs auto-detect (no Databricks runtime): landing/ sources, .spark/
+warehouse + checkpoints, Hive-style table names, quiet rich terminal output.
 """
 
 from __future__ import annotations
@@ -17,33 +17,41 @@ from __future__ import annotations
 import argparse
 import sys
 
+from rich.table import Table
+
+from src.utils.console import console, setup_clean_output
+
 
 def cmd_bronze(args):
     from src.jobs.bronze import run
 
     run(what=args.what)
-    print(f"[bronze] done what={args.what}")
+    console.print(
+        f"[bold green]✔[/bold green] bronze done  [dim]what={args.what}[/dim]"
+    )
 
 
 def cmd_silver(args):
     from src.jobs.silver import run
 
     run(what=args.what)
-    print(f"[silver] done what={args.what}")
+    console.print(
+        f"[bold green]✔[/bold green] silver done  [dim]what={args.what}[/dim]"
+    )
 
 
 def cmd_gold(args):
     from src.jobs.gold import run
 
     run(what=args.what)
-    print(f"[gold] done what={args.what}")
+    console.print(f"[bold green]✔[/bold green] gold done  [dim]what={args.what}[/dim]")
 
 
 def cmd_pipeline(_args):
     from src.jobs.pipeline import run
 
     run()
-    print("[pipeline] bronze->silver->gold done")
+    console.print("[bold green]✔[/bold green] pipeline bronze→silver→gold done")
 
 
 def cmd_gx(args):
@@ -53,39 +61,109 @@ def cmd_gx(args):
 
     # list suites or run validation on sample
     if args.list:
-        suites = [p.stem for p in pathlib.Path("gx/expectations").glob("*.json")]
-        print("GX suites:", suites)
+        suites = sorted(p.stem for p in pathlib.Path("gx/expectations").glob("*.json"))
+        console.print(f"GX suites ({len(suites)}): [cyan]{', '.join(suites)}[/cyan]")
         return
     # run sample validation via quality_checks (mirrors GX)
-    from pyspark.sql import SparkSession
+    from src.utils.engine import get_spark
 
-    spark = SparkSession.builder.getOrCreate()
-    print(f"GX validate suite={args.suite}")
+    spark = get_spark()
+    console.print(f"GX validate suite=[cyan]{args.suite}[/cyan]")
     if args.suite == "watch_events":
         df = spark.createDataFrame(
             [("e1", "u1", "c1", "play", "2024-01-01T00:00:00+00:00", 100, "tv", "s1")],
-            schema=["event_id", "user_id", "content_id", "event_type", "event_timestamp", "watch_duration_seconds", "device_type", "session_id"],
+            schema=[
+                "event_id",
+                "user_id",
+                "content_id",
+                "event_type",
+                "event_timestamp",
+                "watch_duration_seconds",
+                "device_type",
+                "session_id",
+            ],
         )
         res = check_watch_events(df)
-        print(f"pass={res.pass_count} fail={res.fail_count} reasons={res.reasons}")
+        console.print(
+            f"pass={res.pass_count} fail={res.fail_count} reasons={res.reasons}"
+        )
+
+
+def _write_landing(name: str, rows: list[dict]) -> None:
+    """Write JSON-lines to landing/<name>/ — same layout the standalone generator scripts use."""
+    import json
+    from datetime import date
+    from pathlib import Path
+
+    out = Path(__file__).resolve().parent / "landing" / name
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / f"{name}_{date.today().isoformat()}.json"
+    path.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
 
 
 def cmd_generate(args):
-    from data_generator.generate_billing import generate_billing
-    from data_generator.generate_content_catalog import generate_content_catalog
-    from data_generator.generate_subscriptions_cdc import generate_subscriptions_cdc
-    from data_generator.generate_watch_events import generate_watch_events
+    from generator.generate_billing import generate_billing
+    from generator.generate_cdn_stream_logs import generate_cdn_stream_logs
+    from generator.generate_content_catalog import generate_content_catalog
+    from generator.generate_content_ratings import generate_content_ratings
+    from generator.generate_devices_cdc import generate_devices_cdc
+    from generator.generate_profiles import generate_profiles
+    from generator.generate_promotion_redemptions import generate_promotion_redemptions
+    from generator.generate_promotions import generate_promotions
+    from generator.generate_subscriptions_cdc import generate_subscriptions_cdc
+    from generator.generate_support_tickets import generate_support_tickets
+    from generator.generate_watch_events import generate_watch_events
 
-    # quick in-place generation (also available as standalone scripts)
-    print(f"generating content={args.content} subs_users={args.users} watch={args.watch} billing={args.billing}")
-    cc = generate_content_catalog(n=args.content)
-    print(f"content_catalog: {len(cc)}")
-    cdc = generate_subscriptions_cdc(n_users=args.users)
-    print(f"subscriptions_cdc: {len(cdc)}")
-    we = generate_watch_events(n=args.watch)
-    print(f"watch_events: {len(we)}")
-    bi = generate_billing(n=args.billing)
-    print(f"billing: {len(bi)}")
+    console.print(
+        f"generating content={args.content} subs_users={args.users} watch={args.watch} billing={args.billing} "
+        f"devices={args.devices} profiles={args.profiles} promotions={args.promotions} "
+        f"redemptions={args.redemptions} tickets={args.tickets} cdn={args.cdn} ratings={args.ratings}"
+    )
+    # facts draw user/content ids from the same ranges as the dims (--users/--content)
+    # so cross-table joins (gold) actually resolve
+    counts = [
+        ("content_catalog", generate_content_catalog(n=args.content)),
+        ("subscriptions_cdc", generate_subscriptions_cdc(n_users=args.users)),
+        (
+            "watch_events",
+            generate_watch_events(
+                n=args.watch, n_users=args.users, n_content=args.content
+            ),
+        ),
+        ("billing", generate_billing(n=args.billing, n_users=args.users)),
+        ("devices_cdc", generate_devices_cdc(n_users=args.devices)),
+        ("profiles", generate_profiles(n_users=args.profiles)),
+        ("promotions", generate_promotions(n=args.promotions)),
+        (
+            "promotion_redemptions",
+            generate_promotion_redemptions(
+                n=args.redemptions, n_promos=args.promotions, n_users=args.users
+            ),
+        ),
+        (
+            "support_tickets",
+            generate_support_tickets(n=args.tickets, n_users=args.users),
+        ),
+        (
+            "cdn_stream_logs",
+            generate_cdn_stream_logs(
+                n=args.cdn, n_users=args.users, n_content=args.content
+            ),
+        ),
+        (
+            "content_ratings",
+            generate_content_ratings(
+                n=args.ratings, n_users=args.users, n_content=args.content
+            ),
+        ),
+    ]
+    t = Table(title="Landing data generated", title_style="bold", header_style="bold")
+    t.add_column("source")
+    t.add_column("rows", justify="right")
+    for name, rows in counts:
+        _write_landing(name, rows)
+        t.add_row(name, str(len(rows)))
+    console.print(t)
 
 
 def cmd_test_connection(_args):
@@ -93,37 +171,43 @@ def cmd_test_connection(_args):
     from src.utils.connection import get_sql_connection, get_workspace_client
 
     cfg = get_config()
-    print(f"catalog={cfg.catalog_name} env={cfg.env} host={cfg.databricks_host}")
+    console.print(
+        f"catalog={cfg.catalog_name} env={cfg.env} host={cfg.databricks_host}"
+    )
     # workspace
     w = get_workspace_client()
     try:
         me = w.current_user.me()
-        print(f"[OK] workspace: {me.user_name}")
+        console.print(f"[bold green]✔[/bold green] workspace: {me.user_name}")
     except Exception as e:
-        print(f"[WARN] workspace: {e} (CE tokens often lack unity-catalog/jobs scopes — use UI for Jobs)")
+        console.print(
+            f"[yellow]⚠[/yellow]  workspace: {e} (CE tokens often lack unity-catalog/jobs scopes — use UI for Jobs)"
+        )
 
     # SQL
     try:
         conn = get_sql_connection()
         cur = conn.cursor()
         cur.execute("SELECT current_catalog()")
-        print(f"[OK] sql warehouse catalog: {cur.fetchall()[0][0]}")
+        console.print(
+            f"[bold green]✔[/bold green] sql warehouse catalog: {cur.fetchall()[0][0]}"
+        )
         cur.execute("SHOW SCHEMAS IN `workspace`")
-        print(f"[OK] schemas: {[r[0] for r in cur.fetchall()][:5]}")
+        console.print(
+            f"[bold green]✔[/bold green] schemas: {[r[0] for r in cur.fetchall()][:5]}"
+        )
         cur.close()
         conn.close()
     except Exception as e:
-        print(f"[FAIL] sql: {e}")
+        console.print(f"[bold red]✘[/bold red] sql: {e}")
         sys.exit(1)
 
-    # jobs import check
-    try:
-
-        print("[OK] jobs imports ready (src/jobs.pipeline, src/core.scd2)")
-    except Exception as e:
-        print(f"[FAIL] imports: {e}")
-        sys.exit(1)
-    print("Ready to run: uv run python main.py pipeline | make run")
+    console.print(
+        "[bold green]✔[/bold green] jobs imports ready (src/jobs.pipeline, src/core.scd2)"
+    )
+    console.print(
+        "Ready to run: [cyan]uv run python main.py pipeline[/cyan] | make run"
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -131,11 +215,44 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=False)
 
     b = sub.add_parser("bronze", help="run bronze ingestion")
-    b.add_argument("--what", default="all", choices=["all", "watch_events", "subscriptions", "content", "billing"])
+    b.add_argument(
+        "--what",
+        default="all",
+        choices=[
+            "all",
+            "watch_events",
+            "subscriptions",
+            "content",
+            "billing",
+            "devices",
+            "profiles",
+            "promotions",
+            "redemptions",
+            "tickets",
+            "cdn_logs",
+            "ratings",
+        ],
+    )
     b.set_defaults(func=cmd_bronze)
 
     s = sub.add_parser("silver", help="run silver transforms")
-    s.add_argument("--what", default="all", choices=["all", "watch_events", "scd2", "billing"])
+    s.add_argument(
+        "--what",
+        default="all",
+        choices=[
+            "all",
+            "watch_events",
+            "scd2",
+            "billing",
+            "devices_scd2",
+            "profiles",
+            "promotions",
+            "redemptions",
+            "tickets",
+            "cdn_logs",
+            "ratings",
+        ],
+    )
     s.set_defaults(func=cmd_silver)
 
     g = sub.add_parser("gold", help="run gold aggregates")
@@ -155,15 +272,25 @@ def build_parser() -> argparse.ArgumentParser:
     gen.add_argument("--users", type=int, default=500)
     gen.add_argument("--watch", type=int, default=10000)
     gen.add_argument("--billing", type=int, default=2000)
+    gen.add_argument("--devices", type=int, default=500)
+    gen.add_argument("--profiles", type=int, default=750)
+    gen.add_argument("--promotions", type=int, default=200)
+    gen.add_argument("--redemptions", type=int, default=2000)
+    gen.add_argument("--tickets", type=int, default=1000)
+    gen.add_argument("--cdn", type=int, default=10000)
+    gen.add_argument("--ratings", type=int, default=3000)
     gen.set_defaults(func=cmd_generate)
 
-    tc = sub.add_parser("test-connection", help="test Databricks workspace + SQL + imports")
+    tc = sub.add_parser(
+        "test-connection", help="test Databricks workspace + SQL + imports"
+    )
     tc.set_defaults(func=cmd_test_connection)
 
     return p
 
 
 def main():
+    setup_clean_output()
     parser = build_parser()
     args = parser.parse_args()
     if not hasattr(args, "func"):

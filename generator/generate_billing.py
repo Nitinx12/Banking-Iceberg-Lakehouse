@@ -18,8 +18,10 @@ CURRENCIES = ["USD", "EUR", "GBP"]
 TX_TYPES = ["charge", "refund"]
 
 
-def generate_billing(n: int = 20_000, messiness: float = 0.01) -> list[dict]:
-    user_ids = [f"user_{i:06d}" for i in range(5000)]
+def generate_billing(
+    n: int = 20_000, n_users: int = 5000, messiness: float = 0.01
+) -> list[dict]:
+    user_ids = [f"user_{i:06d}" for i in range(n_users)]
     base = datetime.now(tz=UTC) - timedelta(days=90)
     rows: list[dict] = []
     for _ in range(n):

@@ -37,15 +37,14 @@ def write_quarantine(df: DataFrame, table: str) -> None:
     write_delta(df, table, mode="append", partition_by=partition)
 
 
-def log_audit(spark, audit_table: str, layer: str, table: str, passed: int, failed: int) -> None:
+def log_audit(
+    spark, audit_table: str, layer: str, table: str, passed: int, failed: int
+) -> None:
     ensure_db(spark, audit_table.split(".")[0] if "." in audit_table else "silver")
-    audit_df = spark.createDataFrame(
-        [(layer, table, passed, failed, F.current_timestamp())],
-        schema=["layer", "table_name", "pass_count", "fail_count", "run_at"],
-    )
-    # This will fail type-wise for F.current_timestamp() literal; use python datetime instead
     import datetime
 
+    # python datetime, not F.current_timestamp() — Column objects can't be
+    # schema-inferred by createDataFrame
     audit_df = spark.createDataFrame(
         [(layer, table, passed, failed, datetime.datetime.now(datetime.UTC))],
         schema=["layer", "table_name", "pass_count", "fail_count", "run_at"],

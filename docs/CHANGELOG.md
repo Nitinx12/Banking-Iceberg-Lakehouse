@@ -47,6 +47,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/) · Versioning: [SemVer](
   generators, shared ID spaces, GX suites, CLI)
 - `docs/STATUS.md` — live "what we are facing" snapshot: open issues,
   constraints, watchlist
+- `docs/data_dictionary.md` filled — column-level reference for all 11 sources
+  plus Silver-added columns (was an empty stub linked from SCHEMA.md)
+- `notebooks/README.md` — declares `src/jobs` the source of truth and lists the
+  known notebook/job differences (hard-coded paths, no audit logging)
+- Production-readiness audit (2026-09-14): secrets clean in tree + full git
+  history, no tracked generated artifacts, 78 tests green, workflow contracts
+  passing; empty script stubs and duplicate files removed
 - Root `CONTRIBUTING.md` (setup, ground rules, PR checklist) and `SECURITY.md`
   (moved from `.github/`, plus current security watch items)
 - Monitoring scripts in `scripts/`: `health-check.sh` (environment pre-flight),
@@ -59,6 +66,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/) · Versioning: [SemVer](
   `audit-secrets.sh` (pre-push credential-pattern scan)
 
 ### Fixed
+- **`silver.billing` append → MERGE** (production-readiness audit): the write now
+  routes through `_merge_or_create` on `transaction_id` after latest-wins dedupe —
+  re-runs and backfills no longer double-count revenue; regression-tested in
+  `tests/test_billing_idempotency.py` (own Delta-enabled temp warehouse)
 - `main.py` still imported `data_generator.*` (broken since package rename) — also broke the nightly E2E generate step
 - `generate_subscriptions_cdc` minted random `user_{uuid}` ids instead of the shared
   `user_{i:06d}` space — subscriptions couldn't join to any fact table

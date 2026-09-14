@@ -23,10 +23,10 @@ Last reviewed: 2026-09-14
 | 1 | Databricks CE | Workspace schemas not yet populated end-to-end | portfolio demo depends on local runs | follow [DATABRICKS_CE_SETUP.md](DATABRICKS_CE_SETUP.md): DDL → `main.py push` → Job; verify in Catalog Explorer |
 | 2 | Databricks CE | CE personal access tokens often lack `jobs` / Unity Catalog `files` scopes | `main.py push` or Job automation can 403 even with a valid token | regenerate token with broader scopes; Jobs may need the UI (CE limitation, not a bug) |
 | 3 | Databricks CE | CE Unity Catalog support is limited (catalog creation / permissions vary by workspace) | `CREATE CATALOG streamflix-lakehouse` may be unavailable | fall back to the workspace's default catalog and set `CATALOG_NAME` in `.env`; three-part names keep working |
-| 4 | Silver | `silver.billing` appends instead of MERGE | re-running billing ingest can duplicate transactions | route through `_merge_or_create` on `transaction_id` (mechanical; flagged in [SCHEMA.md](SCHEMA.md)) |
-| 5 | Docs | `data_dictionary.md` is still a stub | SCHEMA.md links to it for column-level detail | fill it from the Silver schemas (one compact table per source) |
+| 4 | Silver | ~~`silver.billing` appends instead of MERGE~~ **FIXED** (2026-09-14): routes through `_merge_or_create` on `transaction_id`; regression-tested in `tests/test_billing_idempotency.py` | — | — |
+| 5 | Docs | ~~`data_dictionary.md` is a stub~~ **FIXED** (2026-09-14): filled with column-level reference for all 11 sources | — | — |
 | 6 | Modeling | No users dimension — `user_id` is a shared logical key only | user attributes must be joined from `subscriptions_scd2` | add a `silver.users` dim when a users source exists |
-| 7 | Notebooks | `notebooks/` mirror `src/jobs` by hand and are not executed in CI | silent drift between notebook and job logic | treat `src/jobs` as source of truth; regenerate notebooks when jobs change |
+| 7 | Notebooks | `notebooks/` mirror `src/jobs` by hand and are not executed in CI | silent drift between notebook and job logic | `notebooks/README.md` now declares `src/jobs` the source of truth and lists the known differences; regenerate notebooks when jobs change |
 | 8 | Local mode | `REPLACE TABLE AS SELECT` unsupported on local Delta | gold rebuilds use `_overwrite_from_sql` instead | none needed — behavior identical, keep the helper |
 | 9 | Local mode | Auto Loader (`cloudFiles`) is Databricks-only | local runs batch-read `landing/` | by design; Silver MERGE idempotency is unaffected |
 | 10 | Windows | Spark shutdown chatter (`taskkill SUCCESS:`) can still leak when Spark runs outside `main.py` (e.g. plain `pytest`) | noisy terminal in test runs | the fd-mute is wired into `get_spark`; extend it to the pytest path or filter output |

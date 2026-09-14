@@ -235,27 +235,59 @@ def cmd_push(_args):
         sys.exit(1)
 
     base = cfg.landing_root.rstrip("/")
-    n_files = 0
-    with console.status("[bold]pushing landing data…") as status:
-        for table_dir in sorted(p for p in root.iterdir() if p.is_dir()):
-            files = sorted(table_dir.glob("*.json"))
-            if not files:
-                continue
-            status.update(
-                f"[bold]push {table_dir.name}[/bold] ({len(files)} file{'s' if len(files) > 1 else ''})"
-            )
+    failures: list[tuple[str, str]] = []  # (file, error)
+    uploads: list[tuple[Path, str]] = []  # (local file, target path)
+    for table_dir in sorted(p for p in root.iterdir() if p.is_dir()):
+        files = sorted(table_dir.glob("*.json"))
+        if not files:
+            continue
+        try:
+            w.files.create_directory(directory_path=f"{base}/{table_dir.name}")
+        except Exception:
+            pass  # already exists
+        uploads.extend((f, f"{base}/{table_dir.name}/{f.name}") for f in files)
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def _upload(path: Path, target: str, retries: int = 3) -> None:
+        """Upload one file (SDK chunks internally), retrying transient resets."""
+        last_err: Exception | None = None
+        for _ in range(retries):
             try:
-                w.files.create_directory(directory_path=f"{base}/{table_dir.name}")
-            except Exception:
-                pass  # already exists
-            for f in files:
+                # part_size=1MB keeps each HTTP request small; the SDK
+                # uploads parts in parallel, so a reset only kills one part
                 w.files.upload(
-                    file_path=f"{base}/{table_dir.name}/{f.name}",
-                    contents=io.BytesIO(f.read_bytes()),
+                    file_path=target,
+                    contents=io.BytesIO(path.read_bytes()),
+                    part_size=1024 * 1024,
+                    parallelism=4,
                 )
-                n_files += 1
+                return
+            except Exception as e:  # report and continue per-file
+                last_err = e
+        failures.append((path.name, str(last_err)))
+
+    with console.status("[bold]pushing landing data…") as status, ThreadPoolExecutor(
+        max_workers=4
+    ) as pool:
+        futures = {pool.submit(_upload, p, t): t for p, t in uploads}
+        for i, fut in enumerate(as_completed(futures), 1):
+            fut.result()  # surface worker crashes (failures handled inside)
+            status.update(f"[bold]push {i}/{len(uploads)}[/bold] done")
+
+    if failures:
+        t = Table(title="Push failures", title_style="bold", header_style="bold")
+        t.add_column("file")
+        t.add_column("error")
+        for name, err in failures:
+            t.add_row(name, err[:120])
+        console.print(t)
+        console.print(
+            f"[yellow]⚠[/yellow]  {len(failures)} file(s) failed — re-run [cyan]uv run python main.py push[/cyan] to retry"
+        )
+        sys.exit(1)
     console.print(
-        f"[bold green]✔[/bold green] pushed {n_files} files to [cyan]{base}[/cyan]"
+        f"[bold green]✔[/bold green] pushed {len(uploads)} files to [cyan]{base}[/cyan]"
     )
 
 

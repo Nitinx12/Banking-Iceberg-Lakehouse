@@ -39,6 +39,8 @@ test-results/
 .idea/
 .vscode/
 *.log
+.ipynb_checkpoints/
+Thumbs.db
 
 # ruff
 .ruff_cache/

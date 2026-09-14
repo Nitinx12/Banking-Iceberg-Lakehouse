@@ -108,9 +108,26 @@ def silver_billing(spark=None):
     bronze = spark.table(table_fqn(cfg.bronze_schema, "billing_transactions"))
     cleaned = clean_billing(bronze)
     res = _gate(spark, cfg, cleaned, check_billing, "billing")
-    res.passed.write.format("delta").mode("append").option(
-        "mergeSchema", "true"
-    ).saveAsTable(table_fqn(cfg.silver_schema, "billing"))
+    silver_tbl = table_fqn(cfg.silver_schema, "billing")
+    # idempotent MERGE on transaction_id — append would double-count revenue
+    # on any re-run or backfill (production-readiness audit fix)
+    res.passed.createOrReplaceTempView("src_billing")
+    deduped = spark.sql(
+        "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY transaction_id ORDER BY transaction_timestamp DESC) AS rn FROM src_billing) WHERE rn=1"
+    ).drop("rn")
+    deduped.createOrReplaceTempView("src_billing_deduped")
+    _merge_or_create(
+        spark,
+        deduped,
+        silver_tbl,
+        f"""
+    MERGE INTO {silver_tbl} AS tgt
+    USING src_billing_deduped AS src
+    ON tgt.transaction_id = src.transaction_id
+    WHEN MATCHED THEN UPDATE SET *
+    WHEN NOT MATCHED THEN INSERT *
+    """,
+    )
 
 
 def silver_devices_scd2(spark=None):

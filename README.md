@@ -115,6 +115,7 @@ Full walkthrough: [docs/DATABRICKS_CE_SETUP.md](docs/DATABRICKS_CE_SETUP.md).
 | Doc | Contents |
 |---|---|
 | [SCHEMA.md](docs/SCHEMA.md) | pipeline flow, ER diagram, Bronze/Silver/Gold table reference |
+| [data_dictionary.md](docs/data_dictionary.md) | column-level reference for all 11 sources |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | system flow, repo layout, local vs Databricks execution modes |
 | [DATA_SOURCES.md](docs/DATA_SOURCES.md) | 11 sources, deliberate messiness, shared ID spaces |
 | [MEDALLION_MAPPING.md](docs/MEDALLION_MAPPING.md) | concept-to-code map for each medallion layer |
@@ -130,6 +131,8 @@ Full walkthrough: [docs/DATABRICKS_CE_SETUP.md](docs/DATABRICKS_CE_SETUP.md).
 | [STATUS.md](docs/STATUS.md) | what the project is facing right now — open issues, constraints, watchlist |
 | [CHANGELOG.md](docs/CHANGELOG.md) | notable changes, Keep a Changelog format |
 | [lineage.md](docs/lineage.md) | source-to-gold lineage per table |
+| [benchmarks.md](docs/benchmarks.md) | OPTIMIZE/ZORDER before-and-after measurements |
+| [cluster.md](docs/cluster.md) | CE cluster and notebook `%pip` notes |
 
 ## Monitoring and ops scripts
 

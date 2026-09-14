@@ -21,7 +21,7 @@ flowchart TB
     class CI,N ci
 ```
 
-## Inventory (`tests/`, 11 files)
+## Inventory (`tests/`, 13 files)
 
 | File | Covers |
 |---|---|
@@ -31,6 +31,7 @@ flowchart TB
 | `test_new_quality_checks.py` | one deliberately-bad-record test per new source (devices → ratings) |
 | `test_quality_checks.py` | original gate: watch_events, subscriptions, billing |
 | `test_content_ratings.py` | latest-wins re-rating dedup + idempotent re-run |
+| `test_billing_idempotency.py` | silver.billing MERGE regression: re-run appends nothing, duplicate txn deduped, invalid rows quarantined (own Delta-enabled temp warehouse) |
 | `test_dedup.py` | duplicate handling |
 | `test_data_validations.py` | transformation-level validation |
 | `test_gx_expectations.py` | GX suites stay in sync with the Spark gate |

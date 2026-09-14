@@ -45,6 +45,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/) · Versioning: [SemVer](
   (triggers, CI steps, action pinning, `pull_request_target` no-checkout rule,
   read-only push permissions) and `tests/test_ci_smoke.py` (ruff, collection,
   generators, shared ID spaces, GX suites, CLI)
+- `docs/STATUS.md` — live "what we are facing" snapshot: open issues,
+  constraints, watchlist
+- Root `CONTRIBUTING.md` (setup, ground rules, PR checklist) and `SECURITY.md`
+  (moved from `.github/`, plus current security watch items)
+- Monitoring scripts in `scripts/`: `health-check.sh` (environment pre-flight),
+  `monitor-pipeline.sh` (warehouse row counts, quarantine, audit, freshness),
+  `monitor-ci.sh` (GitHub Actions health via `gh`) — `--report` writes to
+  gitignored `.reports/`
+- Ops scripts in `scripts/`: `setup.sh` (contributor bootstrap),
+  `smoke.sh` (nightly E2E locally, `SMOKE_GENERATE=0` to keep landing data),
+  `reset.sh --rebuild` (wipe `.spark/` + fresh rebuild),
+  `audit-secrets.sh` (pre-push credential-pattern scan)
 
 ### Fixed
 - `main.py` still imported `data_generator.*` (broken since package rename) — also broke the nightly E2E generate step

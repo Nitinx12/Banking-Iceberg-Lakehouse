@@ -127,8 +127,30 @@ Full walkthrough: [docs/DATABRICKS_CE_SETUP.md](docs/DATABRICKS_CE_SETUP.md).
 | [CI_CD.md](docs/CI_CD.md) | GitHub Actions workflows and commit conventions |
 | [TESTING.md](docs/TESTING.md) | test inventory and strategy |
 | [PRODUCTION_UPGRADE.md](docs/PRODUCTION_UPGRADE.md) | CE-to-production upgrade path and deferrals |
+| [STATUS.md](docs/STATUS.md) | what the project is facing right now — open issues, constraints, watchlist |
 | [CHANGELOG.md](docs/CHANGELOG.md) | notable changes, Keep a Changelog format |
 | [lineage.md](docs/lineage.md) | source-to-gold lineage per table |
+
+## Monitoring and ops scripts
+
+`scripts/` carries bash tooling for the three things that can rot silently —
+the environment, the local warehouse, and CI — plus bootstrap, smoke, reset,
+and secret-audit helpers:
+
+| Script | What it does |
+|---|---|
+| `bash scripts/setup.sh` | one-shot bootstrap: uv sync, `.env` from template, git hooks, health check |
+| `bash scripts/health-check.sh` | pre-flight: uv, python, JDK, lockfile, `.env` keys, landing data per source, `.spark/` state, git hygiene |
+| `bash scripts/monitor-pipeline.sh` | local warehouse detail: row counts per bronze/silver/gold table, quarantine by reason, last 12 audit runs, ingest freshness, disk footprint |
+| `bash scripts/monitor-ci.sh` | GitHub Actions via `gh`: last runs, per-workflow status, failures in the last 7 days with URLs, nightly E2E health |
+| `bash scripts/smoke.sh` | run the nightly E2E workflow locally: ruff, generate (nightly volumes), GX suites, full pytest |
+| `bash scripts/reset.sh --rebuild` | wipe disposable local state (`.spark/`) and optionally rebuild with generate + pipeline |
+| `bash scripts/audit-secrets.sh` | pre-push hygiene: `.env` tracked status, credential patterns in tracked files and staged changes |
+
+The monitors exit 0 (they report, they don't gate — `health-check.sh` and
+`audit-secrets.sh` are the exceptions: they fail on what they find). The
+monitors accept `--report` to also write a timestamped file under
+`.reports/` (gitignored).
 
 ## Tests and CI
 
@@ -140,7 +162,9 @@ Commits are enforced on PRs and locally via `.githooks`.
 
 ## Repo governance
 
-`.github/` carries issue templates, a PR template with the local checklist,
-`CODEOWNERS` aligned with labeler areas, `SECURITY.md`, and grouped
+[CONTRIBUTING.md](CONTRIBUTING.md) covers setup, ground rules, and the PR
+checklist; [SECURITY.md](SECURITY.md) the vulnerability-reporting policy and
+current watch items. `.github/` carries issue templates, a PR template with
+the local checklist, `CODEOWNERS` aligned with labeler areas, and grouped
 dependabot updates. Config consistency is enforced by
 `tests/test_label_config.py`.

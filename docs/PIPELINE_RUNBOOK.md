@@ -16,6 +16,11 @@ Everything you need to run, re-run, and un-stick the pipeline.
 | `uv run python main.py test-connection` | check workspace + SQL warehouse + imports |
 | `uv run pytest -q` | full test suite (~3–5 min, local Spark) |
 | `uv run ruff check .` | lint |
+| `bash scripts/health-check.sh` | pre-flight environment check |
+| `bash scripts/monitor-pipeline.sh` | warehouse detail: counts, quarantine, audit, freshness |
+| `bash scripts/smoke.sh` | nightly E2E workflow, run locally |
+| `bash scripts/reset.sh --rebuild --yes` | wipe `.spark/` and rebuild fresh |
+| `bash scripts/audit-secrets.sh` | pre-push secret hygiene check |
 
 ## Fresh end-to-end (local)
 

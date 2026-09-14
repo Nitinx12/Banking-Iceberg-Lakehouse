@@ -1,6 +1,6 @@
 # =====================================================================
 # Nightly E2E — cold-environment smoke on a fresh runner:
-#   1. generate synthetic landing data (data_generator/ must work)
+#   1. generate synthetic landing data (generator/ must work)
 #   2. GX suites resolve (gx/expectations/*.json)
 #   3. full pytest suite with local Spark (SCD2, dedup, quality gate, GX)
 # Catches JVM/Spark/GX environment rot that PRs on a warm cache miss.
@@ -40,7 +40,7 @@ jobs:
         run: uv sync --frozen
 
       - name: Generate synthetic landing data (small)
-        run: uv run python main.py generate --content 500 --users 200 --watch 5000 --billing 1000
+        run: uv run python main.py generate --content 500 --users 200 --watch 5000 --billing 1000 --devices 200 --profiles 300 --promotions 50 --redemptions 500 --tickets 300 --cdn 2000 --ratings 500
 
       - name: List GX suites (config sanity)
         run: |

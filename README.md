@@ -1,55 +1,148 @@
-# StreamFlix Lakehouse
+<p align="center">
+  <img src="assets/databricks-logo.png" alt="Databricks logo" width="180">
+</p>
 
-Medallion lakehouse (Bronze/Silver/Gold) on Databricks Community Edition.
+<h1 align="center">StreamFlix Lakehouse</h1>
+
+<p align="center">
+  A medallion-architecture data lakehouse for a streaming platform — 11 sources,
+  Bronze / Silver / Gold on Delta Lake, runnable identically on Databricks
+  Community Edition and locally.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.13+-3776AB?logo=python&logoColor=white" alt="Python 3.13+">
+  <img src="https://img.shields.io/badge/PySpark-4.2-e25a1c?logo=apachespark&logoColor=white" alt="PySpark 4.2">
+  <img src="https://img.shields.io/badge/Delta_Lake-4.4-0097FD?logo=deltalake&logoColor=white" alt="Delta Lake 4.4">
+  <img src="https://img.shields.io/badge/Databricks-Community_Edition-FF3621?logo=databricks&logoColor=white" alt="Databricks Community Edition">
+  <img src="https://img.shields.io/badge/Great_Expectations-1.x-EC6A21" alt="Great Expectations">
+  <img src="https://img.shields.io/badge/uv-DE5BDA?logo=uv&logoColor=white" alt="uv">
+  <img src="https://img.shields.io/badge/Ruff-261230?logo=ruff&logoColor=white" alt="Ruff">
+  <img src="https://img.shields.io/badge/Pytest-0A9EDC?logo=pytest&logoColor=white" alt="pytest">
+  <img src="https://img.shields.io/badge/GitHub_Actions-2088FF?logo=githubactions&logoColor=white" alt="GitHub Actions">
+</p>
 
 ## Architecture
-Watch events (streaming) + Subscriptions CDC + Content catalog + Billing + Devices CDC (SCD2) + Profiles + Promotions + Promotion redemptions (bridge) + Support tickets (semi-structured) + CDN stream logs (sessionized) + Content ratings (upsert) -> Bronze (Auto Loader, Delta, mergeSchema) -> Silver (clean, dedupe, SCD2, quality gate + quarantine, sessionization) -> Gold (DAU/WAU, watch time by genre, churn, MRR, QoE by device, promo effectiveness, support summary, content engagement) -> BI
 
-See `StreamFlix_Databricks_Project_Plan.md` for full plan and term mapping.
-Docs: [docs/SCHEMA.md](docs/SCHEMA.md) (pipeline flow + ER diagram + table reference) · [docs/CHANGELOG.md](docs/CHANGELOG.md) · [docs/](docs/) (data dictionary, lineage, benchmarks).
+```mermaid
+flowchart LR
+    subgraph SOURCES["Landing - synthetic JSON"]
+        G["11 seeded Faker generators"]
+    end
 
-## Setup
-```bash
-uv sync
-uv run pytest
-uv run ruff check .
-# generate synthetic landing data
-uv run python generator/generate_content_catalog.py --rows 3000
-uv run python generator/generate_subscriptions_cdc.py --users 5000
-uv run python generator/generate_watch_events.py --rows 100000
-uv run python generator/generate_billing.py --rows 20000
-uv run python generator/generate_devices_cdc.py --users 5000
-uv run python generator/generate_profiles.py --users 5000
-uv run python generator/generate_promotions.py --rows 200
-uv run python generator/generate_promotion_redemptions.py --rows 8000
-uv run python generator/generate_support_tickets.py --rows 5000
-uv run python generator/generate_cdn_stream_logs.py --rows 200000
-uv run python generator/generate_content_ratings.py --rows 20000
-# or all at once (small): uv run python main.py generate
+    subgraph BRONZE["Bronze - raw, append-only"]
+        AL["Auto Loader cloudFiles<br/>mergeSchema, availableNow"]
+        BT["Batch overwrite<br/>small dimensions"]
+    end
+
+    subgraph SILVER["Silver - clean and conform"]
+        CL["clean + dedupe + quality gate"]
+        SCD["SCD2 MERGE<br/>subscriptions, devices"]
+        SES["sessionize 30-min gap<br/>CDN logs"]
+        FJ["from_json flatten<br/>support tickets"]
+        UP["latest-wins upsert<br/>content ratings"]
+    end
+
+    subgraph GOLD["Gold - business aggregates"]
+        GA["DAU / WAU, watch by genre,<br/>churn, MRR, QoE by device,<br/>promo effectiveness, support, engagement"]
+    end
+
+    subgraph QUALITY["Quality sidecars"]
+        Q[("silver.quarantine<br/>+ reason")]
+        A[("silver.audit_log<br/>pass / fail counts")]
+    end
+
+    BI["BI / dashboards"]
+
+    G --> AL
+    G --> BT
+    AL --> CL
+    BT --> CL
+    CL --> SCD
+    CL --> SES
+    CL --> FJ
+    CL --> UP
+    SCD --> GA
+    SES --> GA
+    FJ --> GA
+    UP --> GA
+    GA --> BI
+    SCD -. failures routed, not dropped .-> Q
+    SCD -. every run .-> A
+
+    classDef sources fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
+    classDef bronze fill:#fde8d7,stroke:#c2591b,color:#5c2b0d
+    classDef silver fill:#eceff1,stroke:#78909c,color:#263238
+    classDef gold fill:#fdf3c9,stroke:#b58b00,color:#5c4a00
+    classDef quality fill:#fde2e4,stroke:#c9184a,color:#800f2f
+    classDef bi fill:#e6f4ea,stroke:#137333,color:#0d3b21
+    class G sources
+    class AL,BT bronze
+    class CL,SCD,SES,FJ,UP silver
+    class GA gold
+    class Q,A quality
+    class BI bi
 ```
 
-## Databricks CE Notes
-- Hive metastore `bronze`/`silver`/`gold` (no Unity Catalog on CE)
-- Auto Loader `cloudFiles` with `mergeSchema`, `trigger(availableNow=True)` (cluster auto-terminates ~1hr)
-- Local dev uses `uv`; notebooks use `%pip install -r requirements.txt` — export via `uv export --no-hashes -o requirements.txt`
-- **Local pipeline runs**: `uv run python main.py pipeline` works end-to-end off `landing/` — Auto Loader is Databricks-only, so local runs batch-read the landing JSON and write to a Delta warehouse under `.spark/` (gitignored) with Hive-style table names. Terminal output is rich-formatted (progress bars, log lines, output summary table).
+Every Silver write is a MERGE on a natural key, so the pipeline is idempotent
+— re-runs are no-ops, backfills are safe. Rows that fail the quality gate are
+quarantined with a reason, never dropped.
 
-## Known Limitations & Production Upgrade Path
-Unity Catalog, multi-node autoscaling, real S3/ADLS external locations, dbt-databricks, Databricks Workflows (continuous trigger), Kafka + Debezium for CDC, Databricks Secrets + KMS.
+## Quick start
 
-## Tests
-`uv run pytest` covers SCD2 idempotency (subscriptions + devices), dedup, latest-wins upsert (content_ratings), sessionization gap boundaries (cdn_stream_logs), and quality gates for all 11 tables.
+```bash
+uv sync
+uv run pytest                              # full test suite (local Spark)
+uv run python main.py generate             # synthetic landing data
+uv run python main.py pipeline             # bronze -> silver -> gold, locally
+uv run python main.py test-connection      # check Databricks workspace + SQL
+uv run python main.py push                 # upload landing/ to the CE Volume
+```
 
-## CI (GitHub Actions)
-| Workflow | Trigger | What it does |
-|---|---|---|
-| `ci.yml` | push to `main`, PRs | ruff check + format, pre-commit on all files, pytest (local Spark, Java 17) |
-| `commitlint.yml` | PRs | Conventional Commits lint on every commit in the PR (`.commitlintrc.json`) |
-| `label.yml` | PRs | path-based area labels from `.github/labeler.yml` (`area:bronze`…, `dependencies`, …) |
-| `label-sync.yml` | push of `.github/labels.yml`, manual | reconcile GitHub labels with the version-controlled taxonomy |
-| `nightly-e2e.yml` | daily 02:30 UTC, manual | cold-runner smoke: generate landing data, resolve GX suites, full test suite |
+Local runs auto-detect (no Databricks runtime): sources are read from
+`landing/`, Delta tables land under `.spark/` (gitignored), and terminal
+output is rich-formatted with progress bars and summary tables.
 
-CI mirrors the local gates (`.githooks/*`, `.pre-commit-config.yaml`, `make lint` / `make test`) — if it passes locally, it passes in CI. Docs-only changes skip CI via `paths-ignore`.
+## Running on Databricks CE
+
+1. Create the catalog, schemas, and raw-data volume once (SQL DDL).
+2. `uv run python main.py push` — upload `landing/` to the Volume.
+3. Create a Job: Python script task, Git source, `main.py` with parameter
+   `pipeline`, PyPI library `rich`.
+
+Full walkthrough: [docs/DATABRICKS_CE_SETUP.md](docs/DATABRICKS_CE_SETUP.md).
+
+## Documentation
+
+| Doc | Contents |
+|---|---|
+| [SCHEMA.md](docs/SCHEMA.md) | pipeline flow, ER diagram, Bronze/Silver/Gold table reference |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | system flow, repo layout, local vs Databricks execution modes |
+| [DATA_SOURCES.md](docs/DATA_SOURCES.md) | 11 sources, deliberate messiness, shared ID spaces |
+| [MEDALLION_MAPPING.md](docs/MEDALLION_MAPPING.md) | concept-to-code map for each medallion layer |
+| [SCD2_DESIGN.md](docs/SCD2_DESIGN.md) | SCD Type 2 row model, merge decision flow, idempotency |
+| [STREAMING_DESIGN.md](docs/STREAMING_DESIGN.md) | Auto Loader design and 30-minute gap sessionization |
+| [DATA_QUALITY.md](docs/DATA_QUALITY.md) | quality gate, quarantine reason catalog, audit log |
+| [BUSINESS_METRICS.md](docs/BUSINESS_METRICS.md) | Gold tables mapped to business questions and joins |
+| [PIPELINE_RUNBOOK.md](docs/PIPELINE_RUNBOOK.md) | commands, fresh end-to-end recipe, common issues |
+| [DATABRICKS_CE_SETUP.md](docs/DATABRICKS_CE_SETUP.md) | populate the CE workspace: DDL, push, Job setup |
+| [CI_CD.md](docs/CI_CD.md) | GitHub Actions workflows and commit conventions |
+| [TESTING.md](docs/TESTING.md) | test inventory and strategy |
+| [PRODUCTION_UPGRADE.md](docs/PRODUCTION_UPGRADE.md) | CE-to-production upgrade path and deferrals |
+| [CHANGELOG.md](docs/CHANGELOG.md) | notable changes, Keep a Changelog format |
+| [lineage.md](docs/lineage.md) | source-to-gold lineage per table |
+
+## Tests and CI
+
+`uv run pytest` covers SCD2 idempotency (subscriptions and devices), dedup,
+latest-wins upsert, sessionization gap boundaries, and quality gates for all
+11 sources. CI (`ci.yml`) runs ruff and the full suite on every push and PR;
+a nightly E2E workflow rebuilds everything from a cold runner. Conventional
+Commits are enforced on PRs and locally via `.githooks`.
 
 ## Repo governance
-`.github/` also carries: issue templates (bug / feature / data quality), PR template with the local checklist, `CODEOWNERS` (path rules aligned with the labeler areas), `SECURITY.md` (private vulnerability reporting), and `dependabot.yml` (weekly, grouped updates for Actions + uv deps). Config consistency is enforced by `tests/test_label_config.py`.
+
+`.github/` carries issue templates, a PR template with the local checklist,
+`CODEOWNERS` aligned with labeler areas, `SECURITY.md`, and grouped
+dependabot updates. Config consistency is enforced by
+`tests/test_label_config.py`.

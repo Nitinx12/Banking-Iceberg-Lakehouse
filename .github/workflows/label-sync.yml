@@ -20,7 +20,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 concurrency:
   group: label-sync
@@ -31,6 +30,8 @@ jobs:
     name: Sync labels from .github/labels.yml
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      issues: write  # escalated per-job: only the sync job mutates labels
     steps:
       - uses: actions/checkout@v4
 

@@ -27,8 +27,10 @@ def generate_subscriptions_cdc(
     rows: list[dict] = []
     base = datetime.now(tz=UTC) - timedelta(days=365)
 
-    for _ in range(n_users):
-        user_id = f"user_{uuid.uuid4().hex[:8]}"
+    for i in range(n_users):
+        # shared deterministic user space (user_{i:06d}) — facts (watch_events,
+        # billing, ...) draw from the same range so cross-table joins resolve
+        user_id = f"user_{i:06d}"
         subscription_id = f"sub_{uuid.uuid4().hex[:8]}"
         plan = random.choice(PLAN_TIERS)
         ts = base + timedelta(days=random.randint(0, 300))

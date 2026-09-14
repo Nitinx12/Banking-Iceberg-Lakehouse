@@ -6,6 +6,7 @@ Local:  uv run python main.py pipeline
         uv run python main.py gx --suite watch_events
         uv run python main.py test-connection
         uv run python main.py generate --rows 10000
+        uv run python main.py push   # landing/ -> Databricks Volume
 CE:     Databricks Job spark_python_task: main.py pipeline
 
 Local runs auto-detect (no Databricks runtime): landing/ sources, .spark/
@@ -210,6 +211,54 @@ def cmd_test_connection(_args):
     )
 
 
+def cmd_push(_args):
+    """Upload landing/ JSON to the Databricks Volume (RAW_DATA_PATH) for Auto Loader."""
+    import io
+    from pathlib import Path
+
+    from src.config import get_config
+    from src.utils.connection import get_workspace_client
+
+    cfg = get_config()
+    root = Path(__file__).resolve().parent / "landing"
+    if not root.exists() or not any(root.iterdir()):
+        console.print(
+            "[bold red]✘[/bold red] no landing/ data — run [cyan]uv run python main.py generate[/cyan] first"
+        )
+        sys.exit(1)
+
+    w = get_workspace_client()
+    if w is None:
+        console.print(
+            "[bold red]✘[/bold red] workspace client unavailable — check DATABRICKS_HOST/TOKEN in .env"
+        )
+        sys.exit(1)
+
+    base = cfg.landing_root.rstrip("/")
+    n_files = 0
+    with console.status("[bold]pushing landing data…") as status:
+        for table_dir in sorted(p for p in root.iterdir() if p.is_dir()):
+            files = sorted(table_dir.glob("*.json"))
+            if not files:
+                continue
+            status.update(
+                f"[bold]push {table_dir.name}[/bold] ({len(files)} file{'s' if len(files) > 1 else ''})"
+            )
+            try:
+                w.files.create_directory(directory_path=f"{base}/{table_dir.name}")
+            except Exception:
+                pass  # already exists
+            for f in files:
+                w.files.upload(
+                    file_path=f"{base}/{table_dir.name}/{f.name}",
+                    contents=io.BytesIO(f.read_bytes()),
+                )
+                n_files += 1
+    console.print(
+        f"[bold green]✔[/bold green] pushed {n_files} files to [cyan]{base}[/cyan]"
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="main.py", description="StreamFlix Lakehouse")
     sub = p.add_subparsers(dest="cmd", required=False)
@@ -261,6 +310,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     pl = sub.add_parser("pipeline", help="bronze->silver->gold")
     pl.set_defaults(func=cmd_pipeline)
+
+    push = sub.add_parser(
+        "push", help="upload landing/ to the Databricks Volume for Auto Loader"
+    )
+    push.set_defaults(func=cmd_push)
 
     gx = sub.add_parser("gx", help="GX suites")
     gx.add_argument("--suite", default="watch_events")

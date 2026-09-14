@@ -1,0 +1,59 @@
+# =====================================================================
+# Nightly E2E — cold-environment smoke on a fresh runner:
+#   1. generate synthetic landing data (data_generator/ must work)
+#   2. GX suites resolve (gx/expectations/*.json)
+#   3. full pytest suite with local Spark (SCD2, dedup, quality gate, GX)
+# Catches JVM/Spark/GX environment rot that PRs on a warm cache miss.
+# =====================================================================
+name: Nightly E2E
+
+on:
+  schedule:
+    - cron: '30 2 * * *'  # 02:30 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-e2e
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Generate + GX + full suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: false  # nightly should build cold, not from PR cache
+
+      - name: Sync dependencies (frozen)
+        run: uv sync --frozen
+
+      - name: Generate synthetic landing data (small)
+        run: uv run python main.py generate --content 500 --users 200 --watch 5000 --billing 1000
+
+      - name: List GX suites (config sanity)
+        run: |
+          uv run python main.py gx --list
+          test -n "$(ls gx/expectations/*.json)"  # fail if no suites resolve
+
+      - name: Full test suite
+        run: uv run pytest -q --junitxml=test-results/junit.xml
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-test-results
+          path: test-results/
+          if-no-files-found: ignore

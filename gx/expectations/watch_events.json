@@ -10,7 +10,7 @@
     {
       "expectation_type": "expect_column_values_to_be_unique",
       "kwargs": { "column": "event_id" },
-      "meta": { "reason": "duplicate event_id — quarantine (data_generator 0.5%)" }
+      "meta": { "reason": "duplicate event_id — quarantine (generator 0.5%)" }
     },
     {
       "expectation_type": "expect_column_values_to_not_be_null",

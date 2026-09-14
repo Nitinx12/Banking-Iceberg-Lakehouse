@@ -65,7 +65,7 @@ Reviews for *correctness* and *explainability* — can you defend the decision i
 
 **File:** `.claude/agents/data-quality-auditor.md:1` | **Triggers:** "is the quality gate working", quarantine verification, "how do you know your data is trustworthy?"
 
-Read-only. Verifies `src/quality_checks.py` + `notebooks/silver/03_quality_gate.py` against generator-injected messiness (`data_generator/`):
+Read-only. Verifies `src/quality_checks.py` + `notebooks/silver/03_quality_gate.py` against generator-injected messiness (`generator/`):
 
 - late-arriving events
 - duplicate `event_id`s (`watch_events`)

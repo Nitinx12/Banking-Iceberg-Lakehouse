@@ -12,8 +12,27 @@ wheels/
 # secrets — stand-in for Databricks Secrets + KMS (README §3)
 .env
 
-# landing / checkpoints
+# landing / checkpoints / volumes
 landing/
 checkpoints/
 .mnt/
 requirements.txt
+
+# GX / caches
+gx/uncommitted/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+.mypy_cache/
+
+# CI test reports
+test-results/
+
+# IDE
+.idea/
+.vscode/
+*.log
+
+# ruff
+.ruff_cache/
+.qwen/

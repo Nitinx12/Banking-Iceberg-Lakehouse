@@ -1,13 +1,11 @@
 <p align="center">
-  <img src="assets/databricks-logo.png" alt="Databricks logo" width="180">
+  <img src="assets/streamflix_lakehouse_logo.png" alt="Databricks logo" width="180">
 </p>
 
 <h1 align="center">StreamFlix Lakehouse</h1>
 
 <p align="center">
-  A medallion-architecture data lakehouse for a streaming platform — 11 sources,
-  Bronze / Silver / Gold on Delta Lake, runnable identically on Databricks
-  Community Edition and locally.
+  A medallion-architecture (bronze → silver → gold) data pipeline for a fictional streaming service, built on Spark + Delta and designed to run either locally or as a Databricks Job on Unity Catalog.
 </p>
 
 <p align="center">

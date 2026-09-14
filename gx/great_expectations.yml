@@ -1,0 +1,21 @@
+# gx/great_expectations.yml — minimal GX 1.x config for local validation (filesystem store)
+# For Databricks, expectations are also enforced via src/core/quality_checks.py quarantine path.
+config_version: 3.0
+datasources: {}
+stores:
+  expectations_store:
+    class_name: ExpectationsStore
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: ../gx/expectations
+  validation_results_store:
+    class_name: ValidationResultsStore
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: ../gx/uncommitted/validations
+  validation_definition_store:
+    class_name: ValidationDefinitionStore
+    store_backend:
+      class_name: TupleFilesystemStoreBackend
+      base_directory: ../gx/uncommitted/validation_definitions
+data_docs_sites: {}

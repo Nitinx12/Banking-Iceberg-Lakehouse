@@ -1,6 +1,6 @@
 """Dedup / idempotency tests for watch_events."""
 
-from src.transformations import dedupe_on_key
+from src.core.transformations import dedupe_on_key
 
 
 def test_dedupe_on_event_id(spark):

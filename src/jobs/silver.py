@@ -5,9 +5,9 @@ from __future__ import annotations
 from pyspark.sql import functions as F
 
 from src.config import get_config
-from src.quality_checks import check_billing, check_watch_events
-from src.scd2 import build_merge_sql
-from src.transformations import clean_billing, clean_watch_events
+from src.core.quality_checks import check_billing, check_watch_events
+from src.core.scd2 import build_merge_sql
+from src.core.transformations import clean_billing, clean_watch_events
 from src.utils.engine import get_spark, table_fqn
 from src.utils.logger import get_logger
 

@@ -2,7 +2,7 @@
 
 from pyspark.sql import functions as F
 
-from src.scd2 import apply_scd2
+from src.core.scd2 import apply_scd2
 
 
 def test_scd2_basic_insert_and_update(spark):

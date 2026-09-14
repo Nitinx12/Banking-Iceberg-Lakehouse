@@ -3,7 +3,7 @@
 # MAGIC # Silver: clean billing — dedupe on transaction_id
 
 # COMMAND ----------
-from src.transformations import clean_billing
+from src.core.transformations import clean_billing
 
 spark.sql("CREATE DATABASE IF NOT EXISTS silver")
 bronze = spark.table("bronze.billing_transactions")

@@ -2,7 +2,7 @@
 
 from datetime import UTC
 
-from src.quality_checks import check_watch_events
+from src.core.quality_checks import check_watch_events
 
 
 def test_duplicate_event_id_quarantined(spark):

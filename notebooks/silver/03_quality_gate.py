@@ -4,12 +4,12 @@
 # MAGIC Routes failures to _quarantine, logs pass/fail counts.
 
 # COMMAND ----------
-from src.quality_checks import check_watch_events, check_billing
-from src.io_utils import write_quarantine, log_audit
+from src.core.quality_checks import check_watch_events, check_billing
+from src.core.io_utils import write_quarantine, log_audit
 
 # watch_events gate is in 01_clean_watch_events; this notebook demonstrates billing gate
 billing = spark.table("bronze.billing_transactions")
-from src.transformations import clean_billing
+from src.core.transformations import clean_billing
 
 cleaned = clean_billing(billing)
 result = check_billing(cleaned)

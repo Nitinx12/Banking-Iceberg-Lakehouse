@@ -4,7 +4,7 @@
 # MAGIC Uses src/scd2.py MERGE logic; idempotent re-run proven by tests.
 
 # COMMAND ----------
-from src.scd2 import build_merge_sql
+from src.core.scd2 import build_merge_sql
 
 spark.sql("CREATE DATABASE IF NOT EXISTS silver")
 spark.sql("""

@@ -4,9 +4,9 @@
 # MAGIC Idempotent MERGE on event_id.
 
 # COMMAND ----------
-from src.transformations import clean_watch_events
-from src.quality_checks import check_watch_events
-from src.io_utils import ensure_db, write_delta, write_quarantine, log_audit
+from src.core.transformations import clean_watch_events
+from src.core.quality_checks import check_watch_events
+from src.core.io_utils import ensure_db, write_delta, write_quarantine, log_audit
 
 spark.sql("CREATE DATABASE IF NOT EXISTS silver")
 

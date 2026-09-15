@@ -234,7 +234,13 @@ def cmd_push(_args):
         )
         sys.exit(1)
 
-    base = cfg.landing_root.rstrip("/")
+    # push always targets the Volume, not the local landing_root (which is repo/landing locally)
+    import os as _os
+
+    base = (_os.getenv("RAW_DATA_PATH") or getattr(cfg, "landing_root", "")).rstrip("/")
+    # if local default leaked (repo path with backslash), fall back to Volume default
+    if "\\" in base or base.endswith("landing") or not base.startswith("/Volumes"):
+        base = _os.getenv("RAW_DATA_PATH", "/Volumes/streamflix-lakehouse/bronze/raw_data").rstrip("/")
     failures: list[tuple[str, str]] = []  # (file, error)
     uploads: list[tuple[Path, str]] = []  # (local file, target path)
     for table_dir in sorted(p for p in root.iterdir() if p.is_dir()):
@@ -247,39 +253,28 @@ def cmd_push(_args):
             pass  # already exists
         uploads.extend((f, f"{base}/{table_dir.name}/{f.name}") for f in files)
 
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    def _upload(path: Path, target: str, retries: int = 3) -> None:
-        """Upload one file (SDK chunks internally), retrying transient resets."""
-        # skip if already exists with same size — makes re-push instant
+    def _upload(path: Path, target: str) -> None:
+        """Upload one file — single attempt, surface error immediately."""
         try:
-            meta = w.files.get_metadata(file_path=target)
-            if meta.size == path.stat().st_size:
+            w.files.upload(
+                file_path=target,
+                contents=io.BytesIO(path.read_bytes()),
+                overwrite=True,
+            )
+            console.print(f"[dim]pushed {path.name} -> {target}[/dim]")
+            return
+        except Exception as e:
+            msg = str(e)
+            # fast-fail on auth — no point retrying 11 files
+            if "all-apis" in msg or "PermissionDenied" in msg or "Forbidden" in msg:
+                failures.append((path.name, msg[:300]))
+                console.print(f"[red]auth failed for {path.name}: {msg[:120]}[/red]")
                 return
-        except Exception:
-            pass
-        last_err: Exception | None = None
-        for _ in range(retries):
-            try:
-                # 8MB chunks + 8-way part parallelism = fewer HTTP calls on CE
-                w.files.upload(
-                    file_path=target,
-                    contents=io.BytesIO(path.read_bytes()),
-                    part_size=8 * 1024 * 1024,
-                    parallelism=8,
-                )
-                return
-            except Exception as e:  # report and continue per-file
-                last_err = e
-        failures.append((path.name, str(last_err)))
+            failures.append((path.name, msg[:300]))
 
-    with console.status("[bold]pushing landing data…") as status, ThreadPoolExecutor(
-        max_workers=8
-    ) as pool:
-        futures = {pool.submit(_upload, p, t): t for p, t in uploads}
-        for i, fut in enumerate(as_completed(futures), 1):
-            fut.result()  # surface worker crashes (failures handled inside)
-            status.update(f"[bold]push {i}/{len(uploads)}[/bold] done")
+    console.print(f"[bold]pushing {len(uploads)} files to {base} ...[/bold]")
+    for p, t in uploads:
+        _upload(p, t)
 
     if failures:
         t = Table(title="Push failures", title_style="bold", header_style="bold")
@@ -293,7 +288,7 @@ def cmd_push(_args):
         )
         sys.exit(1)
     console.print(
-        f"[bold green]✔[/bold green] pushed {len(uploads)} files to [cyan]{base}[/cyan]"
+        f"[bold green][OK][/bold green] pushed {len(uploads)} files to [cyan]{base}[/cyan]"
     )
 
 

@@ -5,7 +5,7 @@
 <h1 align="center">Databricks StreamFlix Lakehouse</h1>
 
 <p align="center">
-  A medallion-architecture (bronze → silver → gold) data pipeline for a fictional streaming service, built on Spark + Delta and designed to run either locally or as a Databricks Job on Unity Catalog.
+  A medallion-architecture (bronze → silver → gold) data pipeline for a fictional streaming service, built on Spark + Delta and designed to run identically locally or as a Databricks Job on Unity Catalog — chunked, idempotent, and interview-defensible.
 </p>
 
 <p align="center">
@@ -91,48 +91,42 @@ quarantined with a reason, never dropped.
 ```bash
 uv sync
 uv run pytest                              # full test suite (local Spark)
-uv run python main.py generate             # synthetic landing data
-uv run python main.py pipeline             # bronze -> silver -> gold, locally
+uv run python main.py generate             # synthetic landing data (11 Faker sources)
+uv run python main.py pipeline             # bronze -> silver -> gold, locally (~5 min, chunked)
 uv run python main.py test-connection      # check Databricks workspace + SQL
-uv run python main.py push                 # upload landing/ to the CE Volume
+uv run python main.py push                 # upload landing/ to CE Volume (chunked, idempotent)
 ```
 
 Local runs auto-detect (no Databricks runtime): sources are read from
 `landing/`, Delta tables land under `.spark/` (gitignored), and terminal
-output is rich-formatted with progress bars and summary tables.
+output is rich-formatted with progress bars and summary tables. Every Silver
+write is a `MERGE` on a natural key — re-runs are no-ops, quarantine is partitioned by date.
 
 ## Running on Databricks CE
 
-1. Create the catalog, schemas, and raw-data volume once (SQL DDL).
-2. `uv run python main.py push` — upload `landing/` to the Volume.
-3. Create a Job: Python script task, Git source, `main.py` with parameter
-   `pipeline`, PyPI library `rich`.
+1. Create catalog/schemas/volume once — `sql/init_schema.sql` or SQL Editor.
+2. `uv run python main.py push` — upload `landing/` to `streamflix-lakehouse.bronze.raw_data`.
+3. Create Job: **Python script**, Git source `main`, file `main.py`, params `["pipeline"]`, PyPI `rich`.
 
 Full walkthrough: [docs/DATABRICKS_CE_SETUP.md](docs/DATABRICKS_CE_SETUP.md).
 
+### Performance — chunked for CE
+
+Bronze `cloudFiles.maxFilesPerTrigger=500/128m` `src/jobs/bronze.py:92`, Silver `repartition(4/8)` before window `src/jobs/silver.py:69` + `src/core/sessionization.py:34`, local `repartition(8)` for `watch_events`/`cdn_logs` — avoids single-partition spill. Verified `10:50` run: 9593 watch_events, 1092 sessions, 29 QoE rows.
+
 ## Documentation
+
+> Trimmed to 7 core docs — single source of truth, no duplication.
 
 | Doc | Contents |
 |---|---|
 | [SCHEMA.md](docs/SCHEMA.md) | pipeline flow, ER diagram, Bronze/Silver/Gold table reference |
-| [data_dictionary.md](docs/data_dictionary.md) | column-level reference for all 11 sources |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | system flow, repo layout, local vs Databricks execution modes |
-| [DATA_SOURCES.md](docs/DATA_SOURCES.md) | 11 sources, deliberate messiness, shared ID spaces |
-| [MEDALLION_MAPPING.md](docs/MEDALLION_MAPPING.md) | concept-to-code map for each medallion layer |
-| [SCD2_DESIGN.md](docs/SCD2_DESIGN.md) | SCD Type 2 row model, merge decision flow, idempotency |
-| [STREAMING_DESIGN.md](docs/STREAMING_DESIGN.md) | Auto Loader design and 30-minute gap sessionization |
-| [DATA_QUALITY.md](docs/DATA_QUALITY.md) | quality gate, quarantine reason catalog, audit log |
-| [BUSINESS_METRICS.md](docs/BUSINESS_METRICS.md) | Gold tables mapped to business questions and joins |
-| [PIPELINE_RUNBOOK.md](docs/PIPELINE_RUNBOOK.md) | commands, fresh end-to-end recipe, common issues |
 | [DATABRICKS_CE_SETUP.md](docs/DATABRICKS_CE_SETUP.md) | populate the CE workspace: DDL, push, Job setup |
-| [CI_CD.md](docs/CI_CD.md) | GitHub Actions workflows and commit conventions |
-| [TESTING.md](docs/TESTING.md) | test inventory and strategy |
-| [PRODUCTION_UPGRADE.md](docs/PRODUCTION_UPGRADE.md) | CE-to-production upgrade path and deferrals |
-| [STATUS.md](docs/STATUS.md) | what the project is facing right now — open issues, constraints, watchlist |
-| [CHANGELOG.md](docs/CHANGELOG.md) | notable changes, Keep a Changelog format |
-| [lineage.md](docs/lineage.md) | source-to-gold lineage per table |
-| [benchmarks.md](docs/benchmarks.md) | OPTIMIZE/ZORDER before-and-after measurements |
-| [cluster.md](docs/cluster.md) | CE cluster and notebook `%pip` notes |
+| [STREAMING_DESIGN.md](docs/STREAMING_DESIGN.md) | Auto Loader design and 30-minute gap sessionization |
+| [SCD2_DESIGN.md](docs/SCD2_DESIGN.md) | SCD Type 2 row model, merge decision flow, idempotency |
+| [DATA_QUALITY.md](docs/DATA_QUALITY.md) | quality gate, quarantine reason catalog, audit log |
+| [PIPELINE_RUNBOOK.md](docs/PIPELINE_RUNBOOK.md) | commands, fresh end-to-end recipe, common issues |
 
 ## Monitoring and ops scripts
 

@@ -74,11 +74,12 @@ def run(spark=None):
     log.info("pipeline start run_id=%s target=%s env=%s", run_id, target, cfg.env)
 
     progress = Progress(
-        SpinnerColumn(),
+        SpinnerColumn("dots", style="dim"),
         TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
+        BarColumn(bar_width=None, pulse_style="dim"),
         MofNCompleteColumn(),
         console=console,
+        transient=False,
     )
     with progress:
         layers = (

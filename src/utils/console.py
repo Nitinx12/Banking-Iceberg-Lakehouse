@@ -17,7 +17,18 @@ from rich.console import Console
 
 # Every logger / Progress / CLI print goes through this one console so rich can
 # keep the live progress display intact when log lines interleave.
-console = Console()
+# Windows cp1252 can't encode braille/checkmark — reconfigure stdout/stderr to utf-8
+import io as _io
+
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    os.environ["PYTHONIOENCODING"] = "utf-8"
+except Exception:
+    pass
+console = Console(legacy_windows=False, force_terminal=False, soft_wrap=False, file=_io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace") if hasattr(sys.stdout, "buffer") else sys.stdout)
 
 
 def setup_clean_output() -> None:

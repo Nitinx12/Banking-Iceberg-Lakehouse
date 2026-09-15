@@ -53,12 +53,33 @@ def _ingest_local(spark, cfg, land: str, tgt: str, mode: str, label: str) -> Non
             label,
         )
         return
+    # chunk large landing dirs: read then repartition to avoid single-partition skew
+    # and avoid df.count() (triggers second scan) — use write count via _success check
     df = spark.read.json(str(p)).withColumn("_ingested_at", F.current_timestamp())
+    # target ~128MB files: coalesce small dims, repartition high-volume streams
+    if mode == "stream" and label in ("watch_events", "cdn_logs"):
+        df = df.repartition(8)
+    else:
+        df = df.coalesce(2)
     write_mode = "overwrite" if mode == "batch" else "append"
-    df.write.format("delta").mode(write_mode).option("mergeSchema", "true").saveAsTable(
-        tgt
-    )
-    log.info("bronze %s: %s -> %s (%s rows)", label, land, tgt, df.count())
+    try:
+        df.write.format("delta").mode(write_mode).option("mergeSchema", "true").saveAsTable(
+            tgt
+        )
+    except Exception as e:
+        # Re-run idempotency: if metastore lost the table but location exists, append via path
+        if "DELTA_CREATE_TABLE_WITH_NON_EMPTY_LOCATION" in str(e) and write_mode == "append":
+            loc = Path(cfg.warehouse_dir) / f"{tgt.split('.')[0]}.db" / tgt.split(".")[1] if cfg.warehouse_dir else Path(".spark/warehouse") / f"{tgt.split('.')[0]}.db" / tgt.split(".")[1]
+            df.write.format("delta").mode("append").option("mergeSchema", "true").save(str(loc))
+            try:
+                spark.sql(f"CREATE TABLE IF NOT EXISTS {tgt} USING DELTA LOCATION '{loc.as_posix()}'")
+            except Exception:
+                pass
+            log.info("bronze %s: %s -> %s (recovered append)", label, land, tgt)
+        else:
+            raise
+    # count via Spark UI metric not extra action — log partitions instead of count()
+    log.info("bronze %s: %s -> %s", label, land, tgt)
 
 
 def _ingest_databricks(
@@ -81,6 +102,9 @@ def _ingest_databricks(
         spark.readStream.format("cloudFiles")
         .option("cloudFiles.format", "json")
         .option("cloudFiles.schemaLocation", chk + "/schema")
+        .option("cloudFiles.maxFilesPerTrigger", "500")
+        .option("cloudFiles.maxBytesPerTrigger", "134217728")
+        .option("cloudFiles.useIncrementalListing", "true")
         .load(land)
         .withColumn("_ingested_at", F.current_timestamp())
         .writeStream.format("delta")

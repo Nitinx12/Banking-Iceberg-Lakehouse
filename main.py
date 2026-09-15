@@ -52,7 +52,7 @@ def cmd_pipeline(_args):
     from src.jobs.pipeline import run
 
     run()
-    console.print("[bold green]✔[/bold green] pipeline bronze→silver→gold done")
+    console.print("[bold green][OK][/bold green] pipeline bronze->silver->gold done")
 
 
 def cmd_gx(args):
@@ -251,16 +251,22 @@ def cmd_push(_args):
 
     def _upload(path: Path, target: str, retries: int = 3) -> None:
         """Upload one file (SDK chunks internally), retrying transient resets."""
+        # skip if already exists with same size — makes re-push instant
+        try:
+            meta = w.files.get_metadata(file_path=target)
+            if meta.size == path.stat().st_size:
+                return
+        except Exception:
+            pass
         last_err: Exception | None = None
         for _ in range(retries):
             try:
-                # part_size=1MB keeps each HTTP request small; the SDK
-                # uploads parts in parallel, so a reset only kills one part
+                # 8MB chunks + 8-way part parallelism = fewer HTTP calls on CE
                 w.files.upload(
                     file_path=target,
                     contents=io.BytesIO(path.read_bytes()),
-                    part_size=1024 * 1024,
-                    parallelism=4,
+                    part_size=8 * 1024 * 1024,
+                    parallelism=8,
                 )
                 return
             except Exception as e:  # report and continue per-file
@@ -268,7 +274,7 @@ def cmd_push(_args):
         failures.append((path.name, str(last_err)))
 
     with console.status("[bold]pushing landing data…") as status, ThreadPoolExecutor(
-        max_workers=4
+        max_workers=8
     ) as pool:
         futures = {pool.submit(_upload, p, t): t for p, t in uploads}
         for i, fut in enumerate(as_completed(futures), 1):

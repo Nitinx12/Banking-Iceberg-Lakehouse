@@ -67,11 +67,15 @@ def silver_watch_events(spark=None):
     res = _gate(spark, cfg, cleaned, check_watch_events, "watch_events")
     silver_tbl = table_fqn(cfg.silver_schema, "watch_events")
     df = res.passed.withColumn("event_date", F.to_date("event_timestamp"))
+    # chunk large watch_events: repartition by event_date before window to avoid skew
+    df = df.repartition(4, "event_date")
     # dedupe on event_id (latest timestamp wins), then idempotent merge
     df.createOrReplaceTempView("src_events")
     deduped = spark.sql(
         "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY event_id ORDER BY event_timestamp DESC) AS rn FROM src_events) WHERE rn=1"
     ).drop("rn")
+    # coalesce after dedupe for smaller MERGE input files
+    deduped = deduped.coalesce(4)
     deduped.createOrReplaceTempView("src_events_deduped")
     _merge_or_create(
         spark,
@@ -91,9 +95,19 @@ def silver_scd2_subscriptions(spark=None):
     cfg = get_config()
     spark = spark or get_spark()
     tgt = table_fqn(cfg.silver_schema, "subscriptions_scd2")
-    spark.sql(
-        f"CREATE TABLE IF NOT EXISTS {tgt} (subscription_id STRING, user_id STRING, plan_tier STRING, status STRING, effective_date TIMESTAMP, end_date TIMESTAMP, is_current BOOLEAN) USING DELTA"
-    )
+    try:
+        spark.sql(
+            f"CREATE TABLE IF NOT EXISTS {tgt} (subscription_id STRING, user_id STRING, plan_tier STRING, status STRING, effective_date TIMESTAMP, end_date TIMESTAMP, is_current BOOLEAN) USING DELTA"
+        )
+    except Exception as e:
+        if "DELTA_CREATE_TABLE_WITH_NON_EMPTY_LOCATION" in str(e):
+            from pathlib import Path
+
+            base = cfg.warehouse_dir or ".spark/warehouse"
+            loc = Path(base) / f"{cfg.silver_schema}.db" / "subscriptions_scd2"
+            spark.sql(f"CREATE TABLE IF NOT EXISTS {tgt} USING DELTA LOCATION '{loc.as_posix()}'")
+        else:
+            raise
     cdc = spark.table(table_fqn(cfg.bronze_schema, "subscriptions_cdc"))
     cdc.withColumn(
         "change_timestamp", F.to_timestamp("change_timestamp")
@@ -135,13 +149,23 @@ def silver_devices_scd2(spark=None):
     cfg = get_config()
     spark = spark or get_spark()
     tgt = table_fqn(cfg.silver_schema, "devices_scd2")
-    spark.sql(f"""
+    try:
+        spark.sql(f"""
     CREATE TABLE IF NOT EXISTS {tgt} (
       device_id STRING, user_id STRING, device_type STRING, os_family STRING,
       os_version STRING, app_version STRING, is_primary BOOLEAN,
       effective_date TIMESTAMP, end_date TIMESTAMP, is_current BOOLEAN
     ) USING DELTA
     """)
+    except Exception as e:
+        if "DELTA_CREATE_TABLE_WITH_NON_EMPTY_LOCATION" in str(e):
+            from pathlib import Path
+
+            base = cfg.warehouse_dir or ".spark/warehouse"
+            loc = Path(base) / f"{cfg.silver_schema}.db" / "devices_scd2"
+            spark.sql(f"CREATE TABLE IF NOT EXISTS {tgt} USING DELTA LOCATION '{loc.as_posix()}'")
+        else:
+            raise
     cdc = spark.table(table_fqn(cfg.bronze_schema, "devices_cdc"))
     cleaned = clean_devices_cdc(cdc)
     res = _gate(spark, cfg, cleaned, check_devices_cdc, "devices_cdc")
@@ -262,7 +286,9 @@ def silver_cdn_stream_logs(spark=None):
         spark.table(table_fqn(cfg.bronze_schema, "cdn_stream_logs"))
     )
     res = _gate(spark, cfg, cleaned, check_cdn_stream_logs, "cdn_stream_logs")
-    sessions = rollup_sessions(sessionize(res.passed))
+    # repartition by session_id before window-heavy sessionization to avoid single-partition spill
+    chunked = res.passed.repartition(8, "session_id")
+    sessions = rollup_sessions(sessionize(chunked)).coalesce(4)
     sessions.createOrReplaceTempView("src_sessions")
     _merge_or_create(
         spark,

@@ -20,7 +20,39 @@ def write_delta(
         writer = writer.option("mergeSchema", "true")
     if partition_by:
         writer = writer.partitionBy(*partition_by)
-    writer.saveAsTable(table)
+    try:
+        writer.saveAsTable(table)
+    except Exception as e:
+        if "DELTA_CREATE_TABLE_WITH_NON_EMPTY_LOCATION" in str(e):
+            # metastore lost but location exists — append via path then re-register
+            try:
+                spark = df.sparkSession
+                db, tbl = table.split(".") if "." in table else ("default", table)
+                # try to infer warehouse location
+                try:
+                    loc = spark.sql(f"DESCRIBE DETAIL {table}").select("location").first()[0]  # type: ignore
+                except Exception:
+                    from src.config import get_config
+
+                    cfg = get_config()
+                    base = cfg.warehouse_dir or ".spark/warehouse"
+                    loc = f"{base}/{db}.db/{tbl}"
+                # re-normalize to file URI
+                if not loc.startswith("file:"):
+                    import pathlib
+
+                    loc = pathlib.Path(loc).as_posix()
+                    if not loc.startswith("/"):
+                        loc = f"file:/{loc}" if loc[1] == ":" else f"file://{loc}"
+                df.write.format("delta").mode(mode).option("mergeSchema", "true").save(loc.replace("file:", ""))
+                try:
+                    spark.sql(f"CREATE TABLE IF NOT EXISTS {table} USING DELTA LOCATION '{loc}'")
+                except Exception:
+                    pass
+                return
+            except Exception:
+                pass
+        raise
 
 
 def write_quarantine(df: DataFrame, table: str) -> None:

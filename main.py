@@ -304,9 +304,9 @@ def cmd_push(_args):
         return False
 
     console.print(f"[bold]pushing {len(uploads)} files to {base} ...[/bold]")
-    # concurrent upload: 8 workers matches Files API rate limits; sequential
-    # was the bottleneck for many small JSON files (11 tables)
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    # CE throttles aggressively: 8 workers → 5-min timeouts on 1-3 MiB files.
+    # 2 workers is safe for CE; concurrent still beats sequential (11 files).
+    with ThreadPoolExecutor(max_workers=2) as pool:
         fut_to_path = {pool.submit(_upload, p, t): p for p, t in uploads}
         for fut in as_completed(fut_to_path):
             try:

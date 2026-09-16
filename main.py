@@ -274,8 +274,18 @@ def cmd_push(_args):
                 return True
             except Exception as e:
                 msg = str(e)
-                # auth errors are not retriable
-                if "all-apis" in msg or "PermissionDenied" in msg or "Forbidden" in msg:
+                # auth/scope errors are not retriable — fail fast (CE tokens often lack files scope)
+                if any(
+                    s in msg
+                    for s in (
+                        "all-apis",
+                        "PermissionDenied",
+                        "Forbidden",
+                        "required scopes",
+                        "does not have",
+                        "PERMISSION_DENIED",
+                    )
+                ):
                     failures.append((path.name, msg[:300]))
                     console.print(
                         f"[red]auth failed for {path.name}: {msg[:120]}[/red]"
@@ -311,6 +321,16 @@ def cmd_push(_args):
         for name, err in failures:
             t.add_row(name, err[:120])
         console.print(t)
+        # CE-specific hint: Files API requires the `files` scope — CE personal tokens
+        # often lack it (see docs/DATABRICKS_CE_SETUP.md §4 troubleshooting)
+        if any("required scopes" in e or "PERMISSION" in e for _, e in failures):
+            console.print(
+                "[yellow]Hint:[/yellow] CE token missing [cyan]files[/cyan] scope — "
+                "regenerate the PAT with broader scopes (or use Workspace → User Settings → "
+                "Access tokens → Generate new token with [dim]files, sql, workspace[/dim]), "
+                "or upload via Databricks UI: [cyan]Catalog → Volume → Upload[/cyan]. "
+                "See [dim]docs/DATABRICKS_CE_SETUP.md §4[/dim]"
+            )
         console.print(
             f"[yellow]⚠[/yellow]  {len(failures)} file(s) failed — re-run [cyan]uv run python main.py push[/cyan] to retry"
         )

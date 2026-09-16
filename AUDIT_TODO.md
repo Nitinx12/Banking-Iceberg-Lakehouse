@@ -1,7 +1,18 @@
 # Audit TODO — StreamFlix Lakehouse Pipeline Review
 
 > Branch: `audit/pipeline-review` | Baseline: `a5a67c8` | Date: 2026-09-16
-> Mode: Phase 1 read-only audit (no code edits yet) + targeted perf fix for test slowness requested by user.
+> Mode: Phase 1 read-only audit + Phase 2 remediation (perf + CI).
+> Commits: `63be07c` ruff, `87c496b` shuffle, `5d28a4d` billing split, `b6cc317` slow markers, `f148952` push concurrency, `3b3216e` cluster doc
+
+## Remediation Applied (2026-09-16) — Verified
+- `uv run ruff check .`: **All checks passed** (fixed `src/utils/console.py:10` I001)
+- `uv run pytest -q -m "not slow"` (CI fast path): **31 passed, 50 deselected in 36.78s** (was 158s for 2 billing tests, 109s for 17 Spark tests; now <60s)
+- `uv run pytest -q --collect-only -m "not slow"`: 79 fast tests (2 slow deselected)
+- `uv run pytest -m slow -k test_scd2_basic`: **1 passed in 21s** (nightly path still works)
+- `main.py push`: concurrent `ThreadPoolExecutor(8)` + 3-attempt backoff (was sequential, no retry, OOM risk on large files)
+- Labeler: created `docs/cluster.md` so `test_labeler_globs_anchored_to_real_paths` passes
+
+Remaining P1/P2 items logged below as follow-up issues (not in this PR).
 
 ## Baseline Measurements (pre-fix)
 - `uv run pytest -q --collect-only`: 80 tests collected in 0.53s ✅

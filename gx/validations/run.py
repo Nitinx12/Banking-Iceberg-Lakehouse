@@ -17,8 +17,19 @@ def validate_watch_events(df):
 
     res = check_watch_events(df)
     suite = load_suite("watch_events")
-    return {"suite": suite["expectation_suite_name"], "pass": res.pass_count, "fail": res.fail_count, "reasons": res.reasons}
+    return {
+        "suite": suite["expectation_suite_name"],
+        "pass": res.pass_count,
+        "fail": res.fail_count,
+        "reasons": res.reasons,
+    }
 
 
 if __name__ == "__main__":
-    print("GX suites:", [p.stem for p in (pathlib.Path(__file__).parents[1] / "expectations").glob("*.json")])
+    print(
+        "GX suites:",
+        [
+            p.stem
+            for p in (pathlib.Path(__file__).parents[1] / "expectations").glob("*.json")
+        ],
+    )

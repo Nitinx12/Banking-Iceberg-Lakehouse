@@ -30,7 +30,11 @@ def write_delta(
                 db, tbl = table.split(".") if "." in table else ("default", table)
                 # try to infer warehouse location
                 try:
-                    loc = spark.sql(f"DESCRIBE DETAIL {table}").select("location").first()[0]  # type: ignore
+                    loc = (
+                        spark.sql(f"DESCRIBE DETAIL {table}")
+                        .select("location")
+                        .first()[0]
+                    )  # type: ignore
                 except Exception:
                     from src.config import get_config
 
@@ -44,9 +48,13 @@ def write_delta(
                     loc = pathlib.Path(loc).as_posix()
                     if not loc.startswith("/"):
                         loc = f"file:/{loc}" if loc[1] == ":" else f"file://{loc}"
-                df.write.format("delta").mode(mode).option("mergeSchema", "true").save(loc.replace("file:", ""))
+                df.write.format("delta").mode(mode).option("mergeSchema", "true").save(
+                    loc.replace("file:", "")
+                )
                 try:
-                    spark.sql(f"CREATE TABLE IF NOT EXISTS {table} USING DELTA LOCATION '{loc}'")
+                    spark.sql(
+                        f"CREATE TABLE IF NOT EXISTS {table} USING DELTA LOCATION '{loc}'"
+                    )
                 except Exception:
                     pass
                 return

@@ -39,6 +39,14 @@ jobs:
       - name: Sync dependencies (frozen)
         run: uv sync --frozen
 
+      - name: Secret hygiene
+        run: bash scripts/audit-secrets.sh
+
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
       - name: Generate synthetic landing data (small)
         run: uv run python main.py generate --content 500 --users 200 --watch 5000 --billing 1000 --devices 200 --profiles 300 --promotions 50 --redemptions 500 --tickets 300 --cdn 2000 --ratings 500
 

@@ -1,6 +1,10 @@
 """Sessionization tests — gap boundaries, single events, out-of-order input, rollups."""
 
+import pytest
+
 from src.core.sessionization import rollup_sessions, sessionize
+
+pytestmark = pytest.mark.slow
 
 LOG_SCHEMA = [
     "log_id",
@@ -19,7 +23,17 @@ def test_gap_exactly_30min_same_session(spark):
     df = spark.createDataFrame(
         [
             ("l1", "s1", "u1", "ct_1", "tv", "2024-01-01T10:00:00+00:00", 5000, 0, 800),
-            ("l2", "s1", "u1", "ct_1", "tv", "2024-01-01T10:30:00+00:00", 5000, 100, None),
+            (
+                "l2",
+                "s1",
+                "u1",
+                "ct_1",
+                "tv",
+                "2024-01-01T10:30:00+00:00",
+                5000,
+                100,
+                None,
+            ),
         ],
         schema=LOG_SCHEMA,
     )
@@ -31,7 +45,17 @@ def test_gap_over_30min_starts_new_session(spark):
     df = spark.createDataFrame(
         [
             ("l1", "s1", "u1", "ct_1", "tv", "2024-01-01T10:00:00+00:00", 5000, 0, 800),
-            ("l2", "s1", "u1", "ct_1", "tv", "2024-01-01T10:30:01+00:00", 5000, 100, None),
+            (
+                "l2",
+                "s1",
+                "u1",
+                "ct_1",
+                "tv",
+                "2024-01-01T10:30:01+00:00",
+                5000,
+                100,
+                None,
+            ),
         ],
         schema=LOG_SCHEMA,
     )
@@ -64,7 +88,17 @@ def test_out_of_order_input_same_assignment(spark):
     # same events as test_gap_over_30min... but delivered out of order
     df = spark.createDataFrame(
         [
-            ("l2", "s1", "u1", "ct_1", "tv", "2024-01-01T10:30:01+00:00", 5000, 100, None),
+            (
+                "l2",
+                "s1",
+                "u1",
+                "ct_1",
+                "tv",
+                "2024-01-01T10:30:01+00:00",
+                5000,
+                100,
+                None,
+            ),
             ("l1", "s1", "u1", "ct_1", "tv", "2024-01-01T10:00:00+00:00", 5000, 0, 800),
         ],
         schema=LOG_SCHEMA,
@@ -77,8 +111,28 @@ def test_rollup_sessions_metrics(spark):
     df = spark.createDataFrame(
         [
             ("l1", "s1", "u1", "ct_1", "tv", "2024-01-01T10:00:00+00:00", 5000, 0, 800),
-            ("l2", "s1", "u1", "ct_1", "tv", "2024-01-01T10:10:00+00:00", 8000, 250, None),
-            ("l3", "s1", "u1", "ct_1", "tv", "2024-01-01T11:00:00+00:00", 5000, 100, None),  # new session
+            (
+                "l2",
+                "s1",
+                "u1",
+                "ct_1",
+                "tv",
+                "2024-01-01T10:10:00+00:00",
+                8000,
+                250,
+                None,
+            ),
+            (
+                "l3",
+                "s1",
+                "u1",
+                "ct_1",
+                "tv",
+                "2024-01-01T11:00:00+00:00",
+                5000,
+                100,
+                None,
+            ),  # new session
         ],
         schema=LOG_SCHEMA,
     )

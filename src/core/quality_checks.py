@@ -95,17 +95,18 @@ def check_watch_events(
     df = _add_reason(df, F.col("_rn") > 1, "duplicate_event_id")
     df = df.drop("_rn")
 
-    # referential integrity via left join flag (if dim supplied)
-    if content_ids is not None:
-        # broadcast small dim
-        content_set = {
-            r[0] for r in content_ids.select("content_id").distinct().collect()
-        }
-        # avoid collect on large dims in prod — this is test-scale; prod uses left_anti join pattern
-        if content_set:
-            df = _add_reason(
-                df, ~F.col("content_id").isin(list(content_set)), "invalid_content_id"
-            )
+    # referential integrity via broadcast join (no driver collect)
+    if content_ids is not None and "content_id" in content_ids.columns:
+        codes = content_ids.select(F.col("content_id").alias("_cid")).distinct()
+        # broadcast hint avoids shuffle for small dim
+        codes = F.broadcast(codes) if hasattr(F, "broadcast") else codes
+        df = df.join(codes, df["content_id"] == codes["_cid"], "left")
+        df = _add_reason(
+            df,
+            F.col("content_id").isNotNull() & F.col("_cid").isNull(),
+            "invalid_content_id",
+        )
+        df = df.drop("_cid")
 
     quarantined = df.filter(
         F.col("quarantine_reason").isNotNull() & (F.col("quarantine_reason") != "")
@@ -290,6 +291,7 @@ def check_promotion_redemptions(
     if promo_codes is not None and "promo_code" in promo_codes.columns:
         # broadcast small dim; orphan = no match on the promotions dimension
         codes = promo_codes.select(F.col("promo_code").alias("_pc")).distinct()
+        codes = F.broadcast(codes) if hasattr(F, "broadcast") else codes
         df = df.join(codes, df["promo_code"] == codes["_pc"], "left")
         df = _add_reason(
             df,

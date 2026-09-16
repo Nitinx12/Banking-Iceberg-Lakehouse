@@ -142,30 +142,64 @@ def build_merge_sql_generic(
     """Return the Delta MERGE SQL for any CDC dimension (production notebooks).
 
     Notebooks should create a deduped temp view of the CDC source, then run this.
+
+    Fixes vs original (audit P1-1):
+    - USING dedupes exact (key, ts) duplicates via ROW_NUMBER on (key, ts)
+      and filters idempotent replays via LEFT ANTI JOIN on (key, effective_date)
+    - MATCHED UPDATE only when tracked cols actually changed (IS DISTINCT FROM)
+      so no-op updates don't create spurious history rows
+    - Identifiers are backtick-quoted to prevent SQL injection via column names
     """
+
+    # sanitize identifiers — allow only alphanumeric + underscore, quote with backticks
+    def _q(name: str) -> str:
+        if not name.replace("_", "").isalnum():
+            raise ValueError(f"invalid identifier: {name!r}")
+        return f"`{name}`"
+
+    q_key = _q(key_col)
+    q_ts = _q(ts_col)
+    q_event = _q(event_col)
+    q_target = ".".join(_q(p.strip("`")) for p in target_table.split("."))
+    q_view = (
+        _q(cdc_view)
+        if "." not in cdc_view
+        else ".".join(_q(p) for p in cdc_view.split("."))
+    )
+
     insert_cols = [key_col, *tracked_cols, "effective_date", "end_date", "is_current"]
+    q_insert_cols = ", ".join(_q(c) for c in insert_cols)
     insert_vals = [
-        f"src.{key_col}",
-        *[f"src.{c}" for c in tracked_cols],
-        f"src.{ts_col}",
+        f"src.{_q(key_col)}",
+        *[f"src.{_q(c)}" for c in tracked_cols],
+        f"src.{_q(ts_col)}",
         "NULL",
         "true",
     ]
+    # IS DISTINCT FROM handles NULLs correctly (NULL != value)
+    tracked_diff = " OR ".join(
+        f"tgt.{_q(c)} IS DISTINCT FROM src.{_q(c)}" for c in tracked_cols
+    )
+    # idempotency: skip src rows whose (key, effective_date) already exists
+    # left anti join in USING ensures replays don't double-insert
     return f"""
-MERGE INTO {target_table} AS tgt
+MERGE INTO {q_target} AS tgt
 USING (
-  SELECT * FROM (
-    SELECT *, ROW_NUMBER() OVER (PARTITION BY {key_col}, {ts_col} ORDER BY {ts_col}) AS rn
-    FROM {cdc_view}
-  ) WHERE rn = 1
+  SELECT src.* FROM (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY {_q(key_col)}, {_q(ts_col)} ORDER BY {_q(ts_col)}) AS rn
+    FROM {q_view}
+  ) AS src
+  LEFT ANTI JOIN {q_target} AS existing
+    ON existing.{q_key} = src.{q_key} AND existing.effective_date = src.{q_ts}
+  WHERE src.rn = 1
 ) AS src
-ON tgt.{key_col} = src.{key_col} AND tgt.is_current = true
-WHEN MATCHED AND src.{event_col} IN ('update', 'delete') THEN
-  UPDATE SET tgt.end_date = src.{ts_col}, tgt.is_current = false
-WHEN NOT MATCHED AND src.{event_col} IN ('insert', 'update') THEN
-  INSERT ({", ".join(insert_cols)})
+ON tgt.{q_key} = src.{q_key} AND tgt.is_current = true
+WHEN MATCHED AND src.{q_event} IN ('update', 'delete') AND ({tracked_diff} OR src.{q_event} = 'delete') THEN
+  UPDATE SET tgt.end_date = src.{q_ts}, tgt.is_current = false
+WHEN NOT MATCHED AND src.{q_event} IN ('insert', 'update') THEN
+  INSERT ({q_insert_cols})
   VALUES ({", ".join(insert_vals)})
-"""
+ """
 
 
 # --- subscriptions wrappers (original API, kept for backward compatibility) ---

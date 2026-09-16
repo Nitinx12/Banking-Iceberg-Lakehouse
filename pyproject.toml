@@ -32,6 +32,7 @@ ignore = ["DTZ011", "S110", "BLE001"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]
+markers = ["slow: marks tests as slow (Delta MERGE, ~2min, runs nightly only)"]
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]

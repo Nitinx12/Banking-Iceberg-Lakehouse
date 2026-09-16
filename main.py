@@ -253,28 +253,50 @@ def cmd_push(_args):
             pass  # already exists
         uploads.extend((f, f"{base}/{table_dir.name}/{f.name}") for f in files)
 
-    def _upload(path: Path, target: str) -> None:
-        """Upload one file — single attempt, surface error immediately."""
-        try:
-            w.files.upload(
-                file_path=target,
-                contents=io.BytesIO(path.read_bytes()),
-                overwrite=True,
-            )
-            console.print(f"[dim]pushed {path.name} -> {target}[/dim]")
-            return
-        except Exception as e:
-            msg = str(e)
-            # fast-fail on auth — no point retrying 11 files
-            if "all-apis" in msg or "PermissionDenied" in msg or "Forbidden" in msg:
-                failures.append((path.name, msg[:300]))
-                console.print(f"[red]auth failed for {path.name}: {msg[:120]}[/red]")
-                return
-            failures.append((path.name, msg[:300]))
+    import time
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def _upload(path: Path, target: str) -> bool:
+        """Upload one file with retry/backoff; returns True on success."""
+        for attempt in range(3):
+            try:
+                # stream without holding extra copy: read_bytes is fine for
+                # small JSON-lines; large files would use chunked upload
+                data = path.read_bytes()
+                w.files.upload(
+                    file_path=target,
+                    contents=io.BytesIO(data),
+                    overwrite=True,
+                )
+                console.print(f"[dim]pushed {path.name} -> {target}[/dim]")
+                return True
+            except Exception as e:
+                msg = str(e)
+                # auth errors are not retriable
+                if "all-apis" in msg or "PermissionDenied" in msg or "Forbidden" in msg:
+                    failures.append((path.name, msg[:300]))
+                    console.print(f"[red]auth failed for {path.name}: {msg[:120]}[/red]")
+                    return False
+                if attempt == 2:
+                    failures.append((path.name, msg[:300]))
+                    console.print(f"[red]failed {path.name}: {msg[:120]}[/red]")
+                    return False
+                # transient 429/5xx — exponential backoff
+                backoff = 2**attempt
+                console.print(f"[yellow]retry {path.name} in {backoff}s ({msg[:60]})[/yellow]")
+                time.sleep(backoff)
+        return False
 
     console.print(f"[bold]pushing {len(uploads)} files to {base} ...[/bold]")
-    for p, t in uploads:
-        _upload(p, t)
+    # concurrent upload: 8 workers matches Files API rate limits; sequential
+    # was the bottleneck for many small JSON files (11 tables)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        fut_to_path = {pool.submit(_upload, p, t): p for p, t in uploads}
+        for fut in as_completed(fut_to_path):
+            try:
+                fut.result()
+            except Exception as e:
+                failures.append((fut_to_path[fut].name, str(e)[:300]))
 
     if failures:
         t = Table(title="Push failures", title_style="bold", header_style="bold")

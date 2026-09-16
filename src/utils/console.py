@@ -8,6 +8,7 @@ Store `python` alias) and suppressing OS-level fd noise the JVM emits at startup
 from __future__ import annotations
 
 import contextlib
+import io as _io
 import os
 import sys
 import tempfile
@@ -18,7 +19,6 @@ from rich.console import Console
 # Every logger / Progress / CLI print goes through this one console so rich can
 # keep the live progress display intact when log lines interleave.
 # Windows cp1252 can't encode braille/checkmark — reconfigure stdout/stderr to utf-8
-import io as _io
 
 try:
     if hasattr(sys.stdout, "reconfigure"):

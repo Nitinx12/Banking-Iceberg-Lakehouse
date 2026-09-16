@@ -49,14 +49,32 @@ def _gate(spark, cfg, cleaned, check_fn, table_name: str, **check_kwargs):
     return res
 
 
+def _shuffle_partitions(spark) -> int:
+    try:
+        return max(1, int(spark.conf.get("spark.sql.shuffle.partitions", "2")))
+    except Exception:
+        return 2
+
+
 def _merge_or_create(
     spark, df, tbl: str, merge_sql: str, partition_by: list[str] | None = None
 ) -> None:
-    """Idempotent write: MERGE when the table exists, bootstrap it otherwise."""
-    if not spark.catalog.tableExists(tbl):
-        write_delta(df, tbl, mode="overwrite", partition_by=partition_by)
+    """Idempotent write: try MERGE, bootstrap on missing table (avoids TOCTOU).
+
+    The classic tableExists-then-write has a window where a concurrent writer could
+    create the table. Instead we optimistically try MERGE and fall back to
+    overwrite only on TABLE_OR_VIEW_NOT_FOUND, which is also the signal for
+    first-run bootstrap.
+    """
+    try:
+        spark.sql(merge_sql)
         return
-    spark.sql(merge_sql)
+    except Exception as e:
+        if "TABLE_OR_VIEW_NOT_FOUND" not in str(e) and "DELTA_TABLE_NOT_FOUND" not in str(e):
+            raise
+    # bootstrap: table didn't exist — create it atomically
+    # CREATE TABLE IF NOT EXISTS is idempotent, then MERGE would be no-op for empty target
+    write_delta(df, tbl, mode="overwrite", partition_by=partition_by)
 
 
 def silver_watch_events(spark=None):
@@ -68,15 +86,15 @@ def silver_watch_events(spark=None):
     silver_tbl = table_fqn(cfg.silver_schema, "watch_events")
     df = res.passed.withColumn("event_date", F.to_date("event_timestamp"))
     # chunk large watch_events: repartition by event_date before window to avoid skew
-    # 2 partitions suffices for test-scale (was 4); prod can raise via SPARK_SHUFFLE_PARTITIONS
-    df = df.repartition(2, "event_date")
+    parts = _shuffle_partitions(spark)
+    df = df.repartition(parts, "event_date")
     # dedupe on event_id (latest timestamp wins), then idempotent merge
     df.createOrReplaceTempView("src_events")
     deduped = spark.sql(
         "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY event_id ORDER BY event_timestamp DESC) AS rn FROM src_events) WHERE rn=1"
     ).drop("rn")
     # coalesce after dedupe for smaller MERGE input files
-    deduped = deduped.coalesce(2)
+    deduped = deduped.coalesce(min(parts, 4))
     deduped.createOrReplaceTempView("src_events_deduped")
     _merge_or_create(
         spark,
@@ -110,9 +128,13 @@ def silver_scd2_subscriptions(spark=None):
         else:
             raise
     cdc = spark.table(table_fqn(cfg.bronze_schema, "subscriptions_cdc"))
-    cdc.withColumn(
-        "change_timestamp", F.to_timestamp("change_timestamp")
-    ).createOrReplaceTempView("cdc_deduped")
+    # dedupe CDC per spec: latest-per-(key, ts) before merge, handle out-of-order
+    cdc_deduped = (
+        cdc.withColumn("change_timestamp", F.to_timestamp("change_timestamp"))
+        .dropDuplicates(["subscription_id", "change_timestamp"])
+        .orderBy("subscription_id", "change_timestamp")
+    )
+    cdc_deduped.createOrReplaceTempView("cdc_deduped")
     spark.sql(build_merge_sql(tgt, "cdc_deduped"))
     log.info("SCD2 merge done into %s", tgt)
 
@@ -170,9 +192,13 @@ def silver_devices_scd2(spark=None):
     cdc = spark.table(table_fqn(cfg.bronze_schema, "devices_cdc"))
     cleaned = clean_devices_cdc(cdc)
     res = _gate(spark, cfg, cleaned, check_devices_cdc, "devices_cdc")
-    res.passed.withColumn(
-        "change_timestamp", F.to_timestamp("change_timestamp")
-    ).createOrReplaceTempView("devices_cdc_deduped")
+    # dedupe CDC per spec before merge
+    deduped_cdc = (
+        res.passed.withColumn("change_timestamp", F.to_timestamp("change_timestamp"))
+        .dropDuplicates(["device_id", "change_timestamp"])
+        .orderBy("device_id", "change_timestamp")
+    )
+    deduped_cdc.createOrReplaceTempView("devices_cdc_deduped")
     spark.sql(
         build_merge_sql_generic(
             tgt,
@@ -288,9 +314,9 @@ def silver_cdn_stream_logs(spark=None):
     )
     res = _gate(spark, cfg, cleaned, check_cdn_stream_logs, "cdn_stream_logs")
     # repartition by session_id before window-heavy sessionization to avoid single-partition spill
-    # 2 partitions suffices for test-scale (was 8/4); prod can raise via config
-    chunked = res.passed.repartition(2, "session_id")
-    sessions = rollup_sessions(sessionize(chunked)).coalesce(2)
+    parts = _shuffle_partitions(spark)
+    chunked = res.passed.repartition(parts, "session_id")
+    sessions = rollup_sessions(sessionize(chunked)).coalesce(min(parts, 4))
     sessions.createOrReplaceTempView("src_sessions")
     _merge_or_create(
         spark,

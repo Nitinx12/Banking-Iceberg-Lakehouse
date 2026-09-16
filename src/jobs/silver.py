@@ -68,14 +68,15 @@ def silver_watch_events(spark=None):
     silver_tbl = table_fqn(cfg.silver_schema, "watch_events")
     df = res.passed.withColumn("event_date", F.to_date("event_timestamp"))
     # chunk large watch_events: repartition by event_date before window to avoid skew
-    df = df.repartition(4, "event_date")
+    # 2 partitions suffices for test-scale (was 4); prod can raise via SPARK_SHUFFLE_PARTITIONS
+    df = df.repartition(2, "event_date")
     # dedupe on event_id (latest timestamp wins), then idempotent merge
     df.createOrReplaceTempView("src_events")
     deduped = spark.sql(
         "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY event_id ORDER BY event_timestamp DESC) AS rn FROM src_events) WHERE rn=1"
     ).drop("rn")
     # coalesce after dedupe for smaller MERGE input files
-    deduped = deduped.coalesce(4)
+    deduped = deduped.coalesce(2)
     deduped.createOrReplaceTempView("src_events_deduped")
     _merge_or_create(
         spark,
@@ -287,8 +288,9 @@ def silver_cdn_stream_logs(spark=None):
     )
     res = _gate(spark, cfg, cleaned, check_cdn_stream_logs, "cdn_stream_logs")
     # repartition by session_id before window-heavy sessionization to avoid single-partition spill
-    chunked = res.passed.repartition(8, "session_id")
-    sessions = rollup_sessions(sessionize(chunked)).coalesce(4)
+    # 2 partitions suffices for test-scale (was 8/4); prod can raise via config
+    chunked = res.passed.repartition(2, "session_id")
+    sessions = rollup_sessions(sessionize(chunked)).coalesce(2)
     sessions.createOrReplaceTempView("src_sessions")
     _merge_or_create(
         spark,

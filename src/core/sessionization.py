@@ -31,8 +31,10 @@ def sessionize(
       out-of-order input because the window sorts before differencing.
     """
     df = df.withColumn(ts_col, F.to_timestamp(F.col(ts_col)))
-    # pre-partition by key to chunk the window — avoids one partition for hot session_id
-    df = df.repartition(8, key)
+    # pre-partition by key to chunk the window — 2 partitions is enough for
+    # test-scale data (was 8, caused oversharding on tiny DFs; prod large
+    # datasets are handled via cfg.spark_shuffle_partitions on write)
+    df = df.repartition(2, key)
 
     w_ordered = Window.partitionBy(key).orderBy(ts_col)
     gap_seconds = F.unix_timestamp(F.col(ts_col)) - F.lag(

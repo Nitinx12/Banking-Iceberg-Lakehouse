@@ -4,7 +4,11 @@ Re-ratings carry a NEW rating_id, so PK dedupe would keep both; the natural
 key of this table is (user_id, content_id) with latest updated_at winning.
 """
 
+import pytest
+
 from src.core.transformations import latest_rating_per_user_content
+
+pytestmark = pytest.mark.slow
 
 RATING_SCHEMA = ["rating_id", "user_id", "content_id", "rating", "review_text", "rated_at", "updated_at"]
 

@@ -1,8 +1,11 @@
 """Data validations — each GX expectation has a failing-data test (quarantine path)."""
 
+import pytest
 from pyspark.sql.types import IntegerType, StringType, StructField, StructType
 
 from src.core.quality_checks import check_billing, check_watch_events
+
+pytestmark = pytest.mark.slow
 
 
 def test_gx_watch_events_null_rejected(spark):

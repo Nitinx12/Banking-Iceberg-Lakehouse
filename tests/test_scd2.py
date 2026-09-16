@@ -1,8 +1,11 @@
 """SCD2 tests — including idempotency repeat-run required by DoD."""
 
+import pytest
 from pyspark.sql import functions as F
 
 from src.core.scd2 import apply_scd2
+
+pytestmark = pytest.mark.slow
 
 
 def test_scd2_basic_insert_and_update(spark):

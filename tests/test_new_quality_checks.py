@@ -6,6 +6,8 @@ Mirrors tests/test_quality_checks.py: one deliberately bad record per check.
 import json
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from src.core.quality_checks import (
     check_cdn_stream_logs,
     check_content_ratings,
@@ -16,6 +18,8 @@ from src.core.quality_checks import (
     check_support_tickets,
 )
 from src.core.transformations import clean_support_tickets
+
+pytestmark = pytest.mark.slow
 
 RECENT = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
 

@@ -1,6 +1,9 @@
 """Sessionization tests — gap boundaries, single events, out-of-order input, rollups."""
+import pytest
 
 from src.core.sessionization import rollup_sessions, sessionize
+
+pytestmark = pytest.mark.slow
 
 LOG_SCHEMA = [
     "log_id",

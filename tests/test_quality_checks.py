@@ -1,8 +1,11 @@
 """Quality gate tests — each messiness type has a catching check."""
-
 from datetime import UTC
 
+import pytest
+
 from src.core.quality_checks import check_watch_events
+
+pytestmark = pytest.mark.slow
 
 
 def test_duplicate_event_id_quarantined(spark):

@@ -5,9 +5,12 @@ dimension (key_col + tracked_cols parameterized) while subscriptions behavior
 is covered unchanged by tests/test_scd2.py.
 """
 
+import pytest
 from pyspark.sql import functions as F
 
 from src.core.scd2 import apply_scd2_generic
+
+pytestmark = pytest.mark.slow
 
 DEVICE_SCHEMA = [
     "device_id",

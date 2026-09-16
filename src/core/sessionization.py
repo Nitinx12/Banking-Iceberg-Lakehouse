@@ -31,10 +31,15 @@ def sessionize(
       out-of-order input because the window sorts before differencing.
     """
     df = df.withColumn(ts_col, F.to_timestamp(F.col(ts_col)))
-    # pre-partition by key to chunk the window — 2 partitions is enough for
-    # test-scale data (was 8, caused oversharding on tiny DFs; prod large
-    # datasets are handled via cfg.spark_shuffle_partitions on write)
-    df = df.repartition(2, key)
+    # pre-partition by key to chunk the window — respect shuffle partitions
+    # (was hardcoded 8, caused oversharding on tiny DFs; now adapts to
+    # spark.sql.shuffle.partitions so local tests use 2, prod uses 8/200)
+    try:
+        parts = int(df.sparkSession.conf.get("spark.sql.shuffle.partitions", "2"))
+    except Exception:
+        parts = 2
+    parts = max(1, min(parts, 8))
+    df = df.repartition(parts, key)
 
     w_ordered = Window.partitionBy(key).orderBy(ts_col)
     gap_seconds = F.unix_timestamp(F.col(ts_col)) - F.lag(

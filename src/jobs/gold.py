@@ -24,14 +24,16 @@ def gold_dau_wau(spark=None):
     cfg = get_config()
     spark = spark or get_spark()
     watch = table_fqn(cfg.silver_schema, "watch_events")
+    # use partition column event_date for pruning (silver.watch_events is
+    # partitioned by event_date); avoids re-deriving from event_timestamp
     _overwrite_from_sql(
         spark,
-        f"SELECT to_date(event_timestamp) AS event_date, count(DISTINCT user_id) AS dau FROM {watch} GROUP BY 1",
+        f"SELECT event_date, count(DISTINCT user_id) AS dau FROM {watch} WHERE event_date IS NOT NULL GROUP BY 1",
         table_fqn(cfg.gold_schema, "daily_active_users"),
     )
     _overwrite_from_sql(
         spark,
-        f"SELECT date_trunc('week', event_timestamp) AS week_start, count(DISTINCT user_id) AS wau FROM {watch} GROUP BY 1",
+        f"SELECT date_trunc('week', event_date) AS week_start, count(DISTINCT user_id) AS wau FROM {watch} WHERE event_date IS NOT NULL GROUP BY 1",
         table_fqn(cfg.gold_schema, "weekly_active_users"),
     )
 
@@ -78,8 +80,11 @@ def gold_qoe_by_device(spark=None):
     cfg = get_config()
     spark = spark or get_spark()
     sessions = spark.table(table_fqn(cfg.silver_schema, "cdn_stream_sessions"))
-    devices = spark.table(table_fqn(cfg.silver_schema, "devices_scd2")).filter(
-        F.col("is_current")
+    # devices_scd2 current is tiny (500 rows) — broadcast to avoid shuffle
+    devices = F.broadcast(
+        spark.table(table_fqn(cfg.silver_schema, "devices_scd2")).filter(
+            F.col("is_current")
+        )
     )
     joined = sessions.join(devices, on=["user_id", "device_type"], how="inner").join(
         F.broadcast(_catalog_genres(spark, cfg)), on="content_id", how="left"

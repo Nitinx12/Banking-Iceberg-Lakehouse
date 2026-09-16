@@ -55,12 +55,22 @@ def _ingest_local(spark, cfg, land: str, tgt: str, mode: str, label: str) -> Non
         return
     # chunk large landing dirs: read then repartition to avoid single-partition skew
     # and avoid df.count() (triggers second scan) — use write count via _success check
-    df = spark.read.json(str(p)).withColumn("_ingested_at", F.current_timestamp())
+    df = spark.read.json(str(p))
+    # parity: Auto Loader adds _metadata on CE — drop it if present so local
+    # and CE bronze schemas are byte-identical (raw fields + _ingested_at only)
+    if "_metadata" in df.columns:
+        df = df.drop("_metadata")
+    df = df.withColumn("_ingested_at", F.current_timestamp())
     # target ~128MB files: coalesce small dims, repartition high-volume streams
+    try:
+        parts = int(spark.conf.get("spark.sql.shuffle.partitions", "2"))
+    except Exception:
+        parts = 2
+    parts = max(1, min(parts, 8))
     if mode == "stream" and label in ("watch_events", "cdn_logs"):
-        df = df.repartition(8)
+        df = df.repartition(parts)
     else:
-        df = df.coalesce(2)
+        df = df.coalesce(min(parts, 2))
     write_mode = "overwrite" if mode == "batch" else "append"
     try:
         df.write.format("delta").mode(write_mode).option("mergeSchema", "true").saveAsTable(
@@ -88,11 +98,10 @@ def _ingest_databricks(
     """Databricks: Auto Loader (availableNow) for streams, batch overwrite for dims."""
     ensure_schema(spark, cfg.bronze_schema)
     if mode == "batch":
-        df = (
-            spark.read.option("mergeSchema", "true")
-            .json(land)
-            .withColumn("_ingested_at", F.current_timestamp())
-        )
+        df = spark.read.option("mergeSchema", "true").json(land)
+        if "_metadata" in df.columns:
+            df = df.drop("_metadata")
+        df = df.withColumn("_ingested_at", F.current_timestamp())
         df.write.format("delta").mode("overwrite").option(
             "mergeSchema", "true"
         ).saveAsTable(tgt)
@@ -106,6 +115,7 @@ def _ingest_databricks(
         .option("cloudFiles.maxBytesPerTrigger", "134217728")
         .option("cloudFiles.useIncrementalListing", "true")
         .load(land)
+        .drop("_metadata")  # parity: drop Auto Loader metadata so local/CE schemas match
         .withColumn("_ingested_at", F.current_timestamp())
         .writeStream.format("delta")
         .option("checkpointLocation", chk)

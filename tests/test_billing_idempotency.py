@@ -25,7 +25,15 @@ BILLING_SCHEMA = [
 
 ROWS = [
     ("txn_1", "user_1", 9.99, "usd", "charge", "2026-01-01T10:00:00+00:00", "basic"),
-    ("txn_2", "user_2", 15.99, "usd", "charge", "2026-01-02T10:00:00+00:00", "standard"),
+    (
+        "txn_2",
+        "user_2",
+        15.99,
+        "usd",
+        "charge",
+        "2026-01-02T10:00:00+00:00",
+        "standard",
+    ),
     ("txn_3", "user_3", 19.99, "usd", "charge", "2026-01-03T10:00:00+00:00", "premium"),
     # duplicate transaction_id, later timestamp — dedupe keeps one
     ("txn_3", "user_3", 19.99, "usd", "charge", "2026-01-03T11:00:00+00:00", "premium"),
@@ -88,9 +96,13 @@ def test_billing_merge_is_idempotent(spark):
 
     silver_billing(spark)
     first = spark.table("silver.billing")
-    assert first.count() == 3, "expected 3 rows: 4 valid txns deduped to 3, 1 quarantined"
+    assert first.count() == 3, (
+        "expected 3 rows: 4 valid txns deduped to 3, 1 quarantined"
+    )
     total = first.agg({"amount": "sum"}).collect()[0][0]
-    assert total == pytest.approx(9.99 + 15.99 + 19.99), "duplicate txn_3 must not count twice"
+    assert total == pytest.approx(9.99 + 15.99 + 19.99), (
+        "duplicate txn_3 must not count twice"
+    )
 
     # the regression: re-running must not append duplicates
     silver_billing(spark)

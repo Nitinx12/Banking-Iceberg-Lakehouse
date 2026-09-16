@@ -70,7 +70,9 @@ def _merge_or_create(
         spark.sql(merge_sql)
         return
     except Exception as e:
-        if "TABLE_OR_VIEW_NOT_FOUND" not in str(e) and "DELTA_TABLE_NOT_FOUND" not in str(e):
+        if "TABLE_OR_VIEW_NOT_FOUND" not in str(
+            e
+        ) and "DELTA_TABLE_NOT_FOUND" not in str(e):
             raise
     # bootstrap: table didn't exist — create it atomically
     # CREATE TABLE IF NOT EXISTS is idempotent, then MERGE would be no-op for empty target
@@ -124,7 +126,9 @@ def silver_scd2_subscriptions(spark=None):
 
             base = cfg.warehouse_dir or ".spark/warehouse"
             loc = Path(base) / f"{cfg.silver_schema}.db" / "subscriptions_scd2"
-            spark.sql(f"CREATE TABLE IF NOT EXISTS {tgt} USING DELTA LOCATION '{loc.as_posix()}'")
+            spark.sql(
+                f"CREATE TABLE IF NOT EXISTS {tgt} USING DELTA LOCATION '{loc.as_posix()}'"
+            )
         else:
             raise
     cdc = spark.table(table_fqn(cfg.bronze_schema, "subscriptions_cdc"))
@@ -186,7 +190,9 @@ def silver_devices_scd2(spark=None):
 
             base = cfg.warehouse_dir or ".spark/warehouse"
             loc = Path(base) / f"{cfg.silver_schema}.db" / "devices_scd2"
-            spark.sql(f"CREATE TABLE IF NOT EXISTS {tgt} USING DELTA LOCATION '{loc.as_posix()}'")
+            spark.sql(
+                f"CREATE TABLE IF NOT EXISTS {tgt} USING DELTA LOCATION '{loc.as_posix()}'"
+            )
         else:
             raise
     cdc = spark.table(table_fqn(cfg.bronze_schema, "devices_cdc"))

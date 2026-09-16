@@ -73,16 +73,29 @@ def _ingest_local(spark, cfg, land: str, tgt: str, mode: str, label: str) -> Non
         df = df.coalesce(min(parts, 2))
     write_mode = "overwrite" if mode == "batch" else "append"
     try:
-        df.write.format("delta").mode(write_mode).option("mergeSchema", "true").saveAsTable(
-            tgt
-        )
+        df.write.format("delta").mode(write_mode).option(
+            "mergeSchema", "true"
+        ).saveAsTable(tgt)
     except Exception as e:
         # Re-run idempotency: if metastore lost the table but location exists, append via path
-        if "DELTA_CREATE_TABLE_WITH_NON_EMPTY_LOCATION" in str(e) and write_mode == "append":
-            loc = Path(cfg.warehouse_dir) / f"{tgt.split('.')[0]}.db" / tgt.split(".")[1] if cfg.warehouse_dir else Path(".spark/warehouse") / f"{tgt.split('.')[0]}.db" / tgt.split(".")[1]
-            df.write.format("delta").mode("append").option("mergeSchema", "true").save(str(loc))
+        if (
+            "DELTA_CREATE_TABLE_WITH_NON_EMPTY_LOCATION" in str(e)
+            and write_mode == "append"
+        ):
+            loc = (
+                Path(cfg.warehouse_dir) / f"{tgt.split('.')[0]}.db" / tgt.split(".")[1]
+                if cfg.warehouse_dir
+                else Path(".spark/warehouse")
+                / f"{tgt.split('.')[0]}.db"
+                / tgt.split(".")[1]
+            )
+            df.write.format("delta").mode("append").option("mergeSchema", "true").save(
+                str(loc)
+            )
             try:
-                spark.sql(f"CREATE TABLE IF NOT EXISTS {tgt} USING DELTA LOCATION '{loc.as_posix()}'")
+                spark.sql(
+                    f"CREATE TABLE IF NOT EXISTS {tgt} USING DELTA LOCATION '{loc.as_posix()}'"
+                )
             except Exception:
                 pass
             log.info("bronze %s: %s -> %s (recovered append)", label, land, tgt)
@@ -115,7 +128,9 @@ def _ingest_databricks(
         .option("cloudFiles.maxBytesPerTrigger", "134217728")
         .option("cloudFiles.useIncrementalListing", "true")
         .load(land)
-        .drop("_metadata")  # parity: drop Auto Loader metadata so local/CE schemas match
+        .drop(
+            "_metadata"
+        )  # parity: drop Auto Loader metadata so local/CE schemas match
         .withColumn("_ingested_at", F.current_timestamp())
         .writeStream.format("delta")
         .option("checkpointLocation", chk)

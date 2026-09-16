@@ -10,14 +10,38 @@ from src.core.transformations import latest_rating_per_user_content
 
 pytestmark = pytest.mark.slow
 
-RATING_SCHEMA = ["rating_id", "user_id", "content_id", "rating", "review_text", "rated_at", "updated_at"]
+RATING_SCHEMA = [
+    "rating_id",
+    "user_id",
+    "content_id",
+    "rating",
+    "review_text",
+    "rated_at",
+    "updated_at",
+]
 
 
 def test_latest_rating_wins(spark):
     df = spark.createDataFrame(
         [
-            ("rt_old", "user_1", "ct_1", 2, "meh", "2024-01-01T00:00:00+00:00", "2024-01-01T00:00:00+00:00"),
-            ("rt_new", "user_1", "ct_1", 5, "actually great", "2024-01-01T00:00:00+00:00", "2024-02-01T00:00:00+00:00"),
+            (
+                "rt_old",
+                "user_1",
+                "ct_1",
+                2,
+                "meh",
+                "2024-01-01T00:00:00+00:00",
+                "2024-01-01T00:00:00+00:00",
+            ),
+            (
+                "rt_new",
+                "user_1",
+                "ct_1",
+                5,
+                "actually great",
+                "2024-01-01T00:00:00+00:00",
+                "2024-02-01T00:00:00+00:00",
+            ),
         ],
         schema=RATING_SCHEMA,
     )
@@ -30,9 +54,33 @@ def test_latest_rating_wins(spark):
 def test_distinct_user_content_pairs_kept(spark):
     df = spark.createDataFrame(
         [
-            ("rt_1", "user_1", "ct_1", 4, "good", "2024-01-01T00:00:00+00:00", "2024-01-01T00:00:00+00:00"),
-            ("rt_2", "user_1", "ct_2", 3, "fine", "2024-01-01T00:00:00+00:00", "2024-01-01T00:00:00+00:00"),
-            ("rt_3", "user_2", "ct_1", 5, "great", "2024-01-01T00:00:00+00:00", "2024-01-01T00:00:00+00:00"),
+            (
+                "rt_1",
+                "user_1",
+                "ct_1",
+                4,
+                "good",
+                "2024-01-01T00:00:00+00:00",
+                "2024-01-01T00:00:00+00:00",
+            ),
+            (
+                "rt_2",
+                "user_1",
+                "ct_2",
+                3,
+                "fine",
+                "2024-01-01T00:00:00+00:00",
+                "2024-01-01T00:00:00+00:00",
+            ),
+            (
+                "rt_3",
+                "user_2",
+                "ct_1",
+                5,
+                "great",
+                "2024-01-01T00:00:00+00:00",
+                "2024-01-01T00:00:00+00:00",
+            ),
         ],
         schema=RATING_SCHEMA,
     )
@@ -43,8 +91,24 @@ def test_distinct_user_content_pairs_kept(spark):
 def test_latest_wins_idempotent_rerun(spark):
     df = spark.createDataFrame(
         [
-            ("rt_old", "user_1", "ct_1", 2, "meh", "2024-01-01T00:00:00+00:00", "2024-01-01T00:00:00+00:00"),
-            ("rt_new", "user_1", "ct_1", 5, "great", "2024-01-01T00:00:00+00:00", "2024-02-01T00:00:00+00:00"),
+            (
+                "rt_old",
+                "user_1",
+                "ct_1",
+                2,
+                "meh",
+                "2024-01-01T00:00:00+00:00",
+                "2024-01-01T00:00:00+00:00",
+            ),
+            (
+                "rt_new",
+                "user_1",
+                "ct_1",
+                5,
+                "great",
+                "2024-01-01T00:00:00+00:00",
+                "2024-02-01T00:00:00+00:00",
+            ),
         ],
         schema=RATING_SCHEMA,
     )

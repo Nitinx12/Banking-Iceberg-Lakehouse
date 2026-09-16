@@ -150,6 +150,7 @@ def build_merge_sql_generic(
       so no-op updates don't create spurious history rows
     - Identifiers are backtick-quoted to prevent SQL injection via column names
     """
+
     # sanitize identifiers — allow only alphanumeric + underscore, quote with backticks
     def _q(name: str) -> str:
         if not name.replace("_", "").isalnum():
@@ -160,7 +161,11 @@ def build_merge_sql_generic(
     q_ts = _q(ts_col)
     q_event = _q(event_col)
     q_target = ".".join(_q(p.strip("`")) for p in target_table.split("."))
-    q_view = _q(cdc_view) if "." not in cdc_view else ".".join(_q(p) for p in cdc_view.split("."))
+    q_view = (
+        _q(cdc_view)
+        if "." not in cdc_view
+        else ".".join(_q(p) for p in cdc_view.split("."))
+    )
 
     insert_cols = [key_col, *tracked_cols, "effective_date", "end_date", "is_current"]
     q_insert_cols = ", ".join(_q(c) for c in insert_cols)

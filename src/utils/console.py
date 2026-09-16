@@ -28,7 +28,14 @@ try:
     os.environ["PYTHONIOENCODING"] = "utf-8"
 except Exception:
     pass
-console = Console(legacy_windows=False, force_terminal=False, soft_wrap=False, file=_io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace") if hasattr(sys.stdout, "buffer") else sys.stdout)
+console = Console(
+    legacy_windows=False,
+    force_terminal=False,
+    soft_wrap=False,
+    file=_io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    if hasattr(sys.stdout, "buffer")
+    else sys.stdout,
+)
 
 
 def setup_clean_output() -> None:

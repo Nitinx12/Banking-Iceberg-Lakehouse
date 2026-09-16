@@ -240,7 +240,9 @@ def cmd_push(_args):
     base = (_os.getenv("RAW_DATA_PATH") or getattr(cfg, "landing_root", "")).rstrip("/")
     # if local default leaked (repo path with backslash), fall back to Volume default
     if "\\" in base or base.endswith("landing") or not base.startswith("/Volumes"):
-        base = _os.getenv("RAW_DATA_PATH", "/Volumes/streamflix-lakehouse/bronze/raw_data").rstrip("/")
+        base = _os.getenv(
+            "RAW_DATA_PATH", "/Volumes/streamflix-lakehouse/bronze/raw_data"
+        ).rstrip("/")
     failures: list[tuple[str, str]] = []  # (file, error)
     uploads: list[tuple[Path, str]] = []  # (local file, target path)
     for table_dir in sorted(p for p in root.iterdir() if p.is_dir()):
@@ -275,7 +277,9 @@ def cmd_push(_args):
                 # auth errors are not retriable
                 if "all-apis" in msg or "PermissionDenied" in msg or "Forbidden" in msg:
                     failures.append((path.name, msg[:300]))
-                    console.print(f"[red]auth failed for {path.name}: {msg[:120]}[/red]")
+                    console.print(
+                        f"[red]auth failed for {path.name}: {msg[:120]}[/red]"
+                    )
                     return False
                 if attempt == 2:
                     failures.append((path.name, msg[:300]))
@@ -283,7 +287,9 @@ def cmd_push(_args):
                     return False
                 # transient 429/5xx — exponential backoff
                 backoff = 2**attempt
-                console.print(f"[yellow]retry {path.name} in {backoff}s ({msg[:60]})[/yellow]")
+                console.print(
+                    f"[yellow]retry {path.name} in {backoff}s ({msg[:60]})[/yellow]"
+                )
                 time.sleep(backoff)
         return False
 

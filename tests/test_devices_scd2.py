@@ -24,18 +24,47 @@ DEVICE_SCHEMA = [
     "event_type",
 ]
 
-TRACKED = ["user_id", "device_type", "os_family", "os_version", "app_version", "is_primary"]
+TRACKED = [
+    "user_id",
+    "device_type",
+    "os_family",
+    "os_version",
+    "app_version",
+    "is_primary",
+]
 
 
 def apply_devices_scd2(target_df, cdc_df):
-    return apply_scd2_generic(target_df, cdc_df, key_col="device_id", tracked_cols=TRACKED)
+    return apply_scd2_generic(
+        target_df, cdc_df, key_col="device_id", tracked_cols=TRACKED
+    )
 
 
 def test_devices_scd2_basic_insert_and_update(spark):
     cdc = spark.createDataFrame(
         [
-            ("dev_1", "user_1", "tv", "tizen", "1.0", "3.1.0", True, "2024-01-01T00:00:00+00:00", "insert"),
-            ("dev_1", "user_1", "tv", "tizen", "2.0", "3.2.0", True, "2024-03-01T00:00:00+00:00", "update"),
+            (
+                "dev_1",
+                "user_1",
+                "tv",
+                "tizen",
+                "1.0",
+                "3.1.0",
+                True,
+                "2024-01-01T00:00:00+00:00",
+                "insert",
+            ),
+            (
+                "dev_1",
+                "user_1",
+                "tv",
+                "tizen",
+                "2.0",
+                "3.2.0",
+                True,
+                "2024-03-01T00:00:00+00:00",
+                "update",
+            ),
         ],
         schema=DEVICE_SCHEMA,
     )
@@ -44,7 +73,9 @@ def test_devices_scd2_basic_insert_and_update(spark):
     # only one current per key
     assert result.filter(F.col("is_current") == True).count() == 1
     # first row closed, carries the pre-update os_version
-    first = result.filter(F.col("effective_date") == F.to_timestamp(F.lit("2024-01-01T00:00:00+00:00"))).collect()[0]
+    first = result.filter(
+        F.col("effective_date") == F.to_timestamp(F.lit("2024-01-01T00:00:00+00:00"))
+    ).collect()[0]
     assert first["end_date"] is not None
     assert first["is_current"] is False
     assert first["os_version"] == "1.0"
@@ -56,8 +87,28 @@ def test_devices_scd2_basic_insert_and_update(spark):
 def test_devices_scd2_delete_closes_without_new_current(spark):
     cdc = spark.createDataFrame(
         [
-            ("dev_2", "user_2", "mobile", "android", "14.0", "3.1.0", False, "2024-01-01T00:00:00+00:00", "insert"),
-            ("dev_2", "user_2", "mobile", "android", "14.0", "3.1.0", False, "2024-02-01T00:00:00+00:00", "delete"),
+            (
+                "dev_2",
+                "user_2",
+                "mobile",
+                "android",
+                "14.0",
+                "3.1.0",
+                False,
+                "2024-01-01T00:00:00+00:00",
+                "insert",
+            ),
+            (
+                "dev_2",
+                "user_2",
+                "mobile",
+                "android",
+                "14.0",
+                "3.1.0",
+                False,
+                "2024-02-01T00:00:00+00:00",
+                "delete",
+            ),
         ],
         schema=DEVICE_SCHEMA,
     )
@@ -69,8 +120,28 @@ def test_devices_scd2_idempotent_repeat_run(spark):
     """DoD requirement: same batch twice -> same row count."""
     cdc = spark.createDataFrame(
         [
-            ("dev_3", "user_3", "web", "windows", "11.0", "3.0.0", True, "2024-01-01T00:00:00+00:00", "insert"),
-            ("dev_3", "user_3", "web", "windows", "11.1", "3.1.0", True, "2024-04-01T00:00:00+00:00", "update"),
+            (
+                "dev_3",
+                "user_3",
+                "web",
+                "windows",
+                "11.0",
+                "3.0.0",
+                True,
+                "2024-01-01T00:00:00+00:00",
+                "insert",
+            ),
+            (
+                "dev_3",
+                "user_3",
+                "web",
+                "windows",
+                "11.1",
+                "3.1.0",
+                True,
+                "2024-04-01T00:00:00+00:00",
+                "update",
+            ),
         ],
         schema=DEVICE_SCHEMA,
     )
@@ -85,9 +156,39 @@ def test_devices_scd2_unsorted_input_handled(spark):
     # intentionally out-of-order
     cdc = spark.createDataFrame(
         [
-            ("dev_4", "user_4", "tv", "webos", "2.0", "3.2.0", True, "2024-03-01T00:00:00+00:00", "update"),
-            ("dev_4", "user_4", "tv", "webos", "1.0", "3.1.0", True, "2024-01-01T00:00:00+00:00", "insert"),
-            ("dev_4", "user_4", "tv", "webos", "1.5", "3.1.5", True, "2024-02-01T00:00:00+00:00", "update"),
+            (
+                "dev_4",
+                "user_4",
+                "tv",
+                "webos",
+                "2.0",
+                "3.2.0",
+                True,
+                "2024-03-01T00:00:00+00:00",
+                "update",
+            ),
+            (
+                "dev_4",
+                "user_4",
+                "tv",
+                "webos",
+                "1.0",
+                "3.1.0",
+                True,
+                "2024-01-01T00:00:00+00:00",
+                "insert",
+            ),
+            (
+                "dev_4",
+                "user_4",
+                "tv",
+                "webos",
+                "1.5",
+                "3.1.5",
+                True,
+                "2024-02-01T00:00:00+00:00",
+                "update",
+            ),
         ],
         schema=DEVICE_SCHEMA,
     )

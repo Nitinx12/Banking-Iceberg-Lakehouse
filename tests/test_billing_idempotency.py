@@ -60,7 +60,7 @@ def _seed_bronze(spark):
         pass
 
 
-def test_billing_dedupe_is_idempotent(spark):
+def test_billing_dedupe_is_idempotent(spark_delta):
     """Fast idempotency check without Delta MERGE — tests dedupe + quality gate.
 
     Proves the regression (append would double-count) via pure DataFrame
@@ -69,33 +69,33 @@ def test_billing_dedupe_is_idempotent(spark):
     """
     from src.core.quality_checks import check_billing
 
-    df = spark.createDataFrame(ROWS, schema=BILLING_SCHEMA)
+    df = spark_delta.createDataFrame(ROWS, schema=BILLING_SCHEMA)
     res = check_billing(df)
     # quality gate quarantines null PK + duplicate second occurrence
     assert res.fail_count == 2
     # dedupe logic from silver_billing: keep latest per transaction_id
     res.passed.createOrReplaceTempView("src_billing_fast")
-    deduped = spark.sql(
+    deduped = spark_delta.sql(
         "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY transaction_id ORDER BY transaction_timestamp DESC) AS rn FROM src_billing_fast) WHERE rn=1"
     ).drop("rn")
     assert deduped.count() == 3
     total = deduped.agg({"amount": "sum"}).collect()[0][0]
     assert total == pytest.approx(9.99 + 15.99 + 19.99)
     # re-running dedupe on same input must be stable
-    deduped2 = spark.sql(
+    deduped2 = spark_delta.sql(
         "SELECT * FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY transaction_id ORDER BY transaction_timestamp DESC) AS rn FROM src_billing_fast) WHERE rn=1"
     ).drop("rn")
     assert deduped2.count() == 3
 
 
 @pytest.mark.slow
-def test_billing_merge_is_idempotent(spark):
+def test_billing_merge_is_idempotent(spark_delta):
     from src.jobs.silver import silver_billing
 
-    _seed_bronze(spark)
+    _seed_bronze(spark_delta)
 
-    silver_billing(spark)
-    first = spark.table("silver.billing")
+    silver_billing(spark_delta)
+    first = spark_delta.table("silver.billing")
     assert first.count() == 3, (
         "expected 3 rows: 4 valid txns deduped to 3, 1 quarantined"
     )
@@ -105,8 +105,8 @@ def test_billing_merge_is_idempotent(spark):
     )
 
     # the regression: re-running must not append duplicates
-    silver_billing(spark)
-    again = spark.table("silver.billing")
+    silver_billing(spark_delta)
+    again = spark_delta.table("silver.billing")
     assert again.count() == 3, "re-run appended rows — billing write is not idempotent"
     assert again.agg({"amount": "sum"}).collect()[0][0] == pytest.approx(
         9.99 + 15.99 + 19.99
@@ -114,15 +114,15 @@ def test_billing_merge_is_idempotent(spark):
 
 
 @pytest.mark.slow
-def test_billing_quarantines_invalid_rows(spark):
+def test_billing_quarantines_invalid_rows(spark_delta):
     from pyspark.sql import functions as F
 
     from src.jobs.silver import silver_billing
 
-    _seed_bronze(spark)
-    silver_billing(spark)
+    _seed_bronze(spark_delta)
+    silver_billing(spark_delta)
 
-    quarantine = spark.table("silver.quarantine")
+    quarantine = spark_delta.table("silver.quarantine")
     quarantined = quarantine.filter(F.col("transaction_id").isNull())
     assert quarantined.count() >= 1, "null transaction_id should land in quarantine"
     reasons = {r["quarantine_reason"] for r in quarantined.collect()}

@@ -50,7 +50,6 @@ def write_dq_result(
 def check_gold_reconciliation(spark, run_id, batch_id):
     """Gold reconciliation: Silver→Gold parity, orphan facts (Architecture 11.1 layer 4)."""
     try:
-        silver_cnt = spark.table("banking.silver.customers").count()
         gold_cnt = spark.table("banking.gold.dim_customer").count()
         # parity check
         status = "pass" if gold_cnt >= 1 else "fail"

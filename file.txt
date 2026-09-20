@@ -16,7 +16,8 @@ docker compose ps
 
 # 3. Bronze dry-run vs Mongo (no write, verified 60k/95k/2M/3M before)
 #    uses local Mongo banking when Docker mongo not yet seeded
-powershell -Command "$env:MONGO_URI='mongodb://localhost:27017/banking'; uv run python -m jobs.ingestion.bronze --all --dry-run"
+#    In PowerShell, set env first then run (do NOT use powershell -Command with $env: inside quotes):
+$env:MONGO_URI="mongodb://localhost:27017/banking"; uv run python -m jobs.ingestion.bronze --all --dry-run
 
 # 4. Bronze real write (Iceberg banking.bronze.* + ops.ingestion_watermarks)
 uv run python -m jobs.ingestion.bronze --all

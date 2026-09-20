@@ -56,7 +56,7 @@ goto :eof
 call :env
 where uv >nul 2>&1
 if %ERRORLEVEL%==0 (
-  uv sync --group dev
+  uv sync --group dev --group ingestion --group dashboard
 ) else (
   echo uv not found — install from https://docs.astral.sh/uv/ or use pip
 )

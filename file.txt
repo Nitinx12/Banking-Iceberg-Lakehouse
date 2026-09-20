@@ -23,56 +23,56 @@ Fill this file (or drop files) and I will scaffold next phases.
    Watermarks: all incremental on created_at (+_id tiebreaker for 2M/3M), branches=full refresh. Overlap 10m.
 
 ----------------------------------------------------------------
-3. DATABRICKS WORKSPACE TIER (ADR 3 — Architecture 6.1)
+3. DATABRICKS WORKSPACE TIER (ADR 3 — Architecture 6.1) — PENDING
    [ ] Community Edition (no Terraform/Jobs API — fallback to Delta for Silver/Gold)
    [ ] Trial / Paid (supports Iceberg via Unity Catalog + Jobs API)
    If trial/paid, share: DATABRICKS_HOST = https://...cloud.databricks.com
-                        (token will be set via .env, do NOT paste real token here)
 
 ----------------------------------------------------------------
-4. CLOUD PROVIDER for object storage + Terraform state (Architecture 15.2)
-   [ ] AWS S3
-   [ ] Local only (MinIO — already in docker-compose core)
+4. CLOUD PROVIDER for object storage + Terraform state (Architecture 15.2) — PENDING
+   [x] Local only (MinIO — already in docker-compose core) ← default unless you say AWS
+   [ ] AWS S3 — bucket warehouse: ___  tfstate: ___
    [ ] Other: ___
-   If AWS: bucket name for warehouse + bucket for tfstate: ___
 
 ----------------------------------------------------------------
-5. REFRESH CADENCE per collection (Architecture 21.5)
-   Daily / Hourly / Near-real-time (Flink Phase 7)
-   customers:    [ ] daily [ ] hourly [ ] streaming
-   accounts:     [ ] daily [ ] hourly [ ] streaming
-   transactions: [ ] daily [ ] hourly [ ] streaming
-   branches:     [ ] full refresh daily
-   etc.
+5. REFRESH CADENCE per collection (Architecture 21.5) — PENDING
+   Default if you skip: all daily incremental, branches full refresh, Flink streaming deferred to Phase 7.
+   To override, mark: [daily / hourly / streaming]
+   customers:    ___
+   accounts:     ___
+   transactions: ___  etc.
 
 ----------------------------------------------------------------
-6. MONTHLY CLOUD BUDGET ceiling (PROJECT_PLAN 11, Architecture 21.6)
-   Budget USD per month: ___  (decides cluster sizes, how long dev/staging stay up)
+6. MONTHLY CLOUD BUDGET ceiling (PROJECT_PLAN 11, Architecture 21.6) — PENDING
+   Budget USD/month: ___  (leave blank = local dev only, minimal cloud cost)
 
 ----------------------------------------------------------------
-7. ALERT ROUTING (Architecture 12.2, 13)
-   SLACK_WEBHOOK_URL: ___  (or say "skip for now")
+7. ALERT ROUTING (Architecture 12.2, 13) — PENDING
+   SLACK_WEBHOOK_URL: ___  (skip for now = ok)
    ALERT_EMAIL_TO:    ___
 
 ----------------------------------------------------------------
-8. BUSINESS TIMEZONE & LOCALE
-   BUSINESS_TIMEZONE (Architecture 1.4): [x] Asia/Kolkata  [ ] other: ___
+8. BUSINESS TIMEZONE & LOCALE — SET
+   BUSINESS_TIMEZONE (Architecture 1.4): [x] Asia/Kolkata  ← confirmed
 
 ----------------------------------------------------------------
-9. DATASET LOCATION (if you already have a Mongo dump)
-   Path or download link: ___
-   Format: [ ] mongodump  [ ] JSON export  [ ] CSV
+9. DATASET LOCATION — PROVIDED ✓
+   Local Mongo banking at mongodb://localhost/ + tests/data/*.json (10 collections, see section 1)
+   Format: [x] live Mongo  [x] JSON export (2 docs each)  — full counts above
 
 ----------------------------------------------------------------
-10. ANYTHING ELSE
-   Extra notes, PII rules, compliance, or links to manager's docs:
+10. ANYTHING ELSE — OPTIONAL
+   Notes:
 
 ================================================================
+STATUS: 1-2 DONE ✓ (2026-09-20) — 3-10 PENDING (need your input to start Phase 1)
+================================================================
 How to provide:
-- Edit this file directly, or drop files in tests/data/, or paste docs in chat.
-- Keep secrets (tokens/passwords) in .env only — do NOT paste real secrets here.
-- After you fill, run: git add file.txt tests/data/*.json && git commit -m "docs: provide HDFC dataset info"
+- Edit this file directly, or reply in chat. Keep secrets in .env only — do NOT paste tokens here.
+- After you fill, run: git add file.txt && git commit -m "docs: provide HDFC info for Phase 1"
 
-Next steps after you provide:
-- I will profile collections, finalize watermark fields (updated_at/created_at), and write contracts/*.yml
-- Then scaffold Phase 1: Spark Iceberg session + Bronze DDL + ingestion job (watermark + overlap + _batch_id idempotent)
+Done (Phase 0):
+- Profiled 10 collections (docs/profiling.md), contracts/*.yml created, sample data tests/data/*.json added, .env + compose core ready.
+
+Next (Phase 1 — needs your input on 3-10 above):
+- Spark session factory (Iceberg JDBC catalog on postgres + S3 MinIO), Bronze DDL per contracts (Architecture 5.3 _doc/_op/_source_ts/_ingested_at/_batch_id/_doc_hash), ops.ingestion_watermarks + pipeline_runs, batch job (watermark read → overlap 10m → secondaryPreferred partitioned reads → _batch_id idempotent delete-before-write → advance watermark)

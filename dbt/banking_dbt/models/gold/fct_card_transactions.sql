@@ -1,2 +1,11 @@
-{{ config(materialized='incremental', unique_key='card_txn_id') }}
-select cast(json_extract_scalar(_doc, '$.card_txn_id') as int) as card_txn_id, cast(json_extract_scalar(_doc, '$.card_id') as int) as card_id, cast(json_extract_scalar(_doc, '$.amount') as decimal(18,2)) as amount, cast(json_extract_scalar(_doc, '$.is_fraud') as int) as is_fraud from {{ source('bronze','card_transactions') }} {% if is_incremental() %} where _ingested_at > (select max(silver_loaded_at) from {{ ref('silver_card_transactions') }}) {% endif %}
+{{ config(materialized='incremental', unique_key='card_txn_id', tags=['gold']) }}
+-- fct_card_transactions via Silver — FK to dim, no orphans
+select
+  s.card_txn_id,
+  s.card_id,
+  s.amount,
+  s.is_fraud,
+  cast(s.txn_date as date) as txn_date,
+  s.silver_loaded_at as _loaded_at
+from {{ ref('silver_card_transactions') }} s
+{% if is_incremental() %} where s.silver_loaded_at > (select max(_loaded_at) from {{ this }}) {% endif %}

@@ -1,13 +1,17 @@
 {{ config(
     materialized='incremental',
-    unique_key='transaction_id'
+    unique_key='transaction_id',
+    tags=['gold']
 ) }}
--- fct_transactions incremental, FK to dim_customer with no orphans (Architecture 7.4)
+-- fct_transactions incremental via Silver (not Bronze) — FK to dim_account, no orphans (Architecture 7.4)
 select
-  cast(json_extract_scalar(_doc, '$.transaction_id') as int) as transaction_id,
-  cast(json_extract_scalar(_doc, '$.account_id') as int) as account_id,
-  '-1' as customer_sk, -- resolved via account→customer in Silver
-  cast(json_extract_scalar(_doc, '$.amount') as decimal(18,2)) as amount,
-  cast(json_extract_scalar(_doc, '$.txn_date') as date) as txn_date
-from {{ source('bronze','transactions') }}
-{% if is_incremental() %} where _ingested_at > (select max(txn_date) from {{ this }}) {% endif %}
+  s.transaction_id,
+  s.account_id,
+  coalesce(d.account_sk, '-1') as account_sk,
+  s.amount,
+  cast(s.txn_date as date) as txn_date,
+  s.channel,
+  s.silver_loaded_at as _loaded_at
+from {{ ref('silver_transactions') }} s
+left join {{ ref('dim_account') }} d on s.account_id = d.account_id and d.is_current
+{% if is_incremental() %} where s.silver_loaded_at > (select max(_loaded_at) from {{ this }}) {% endif %}

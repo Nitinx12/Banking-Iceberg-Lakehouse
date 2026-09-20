@@ -4,6 +4,11 @@ sources:
   - name: bronze
     database: "{{ env_var('ICEBERG_CATALOG_NAME', 'banking') }}"
     schema: bronze
+    # freshness per Architecture 7.2 — enabled when dbt Fusion supports it
+    # freshness:  # TODO: uncomment after dbt Fusion freshness support
+    #   warn_after: { count: 24, period: hour }
+    #   error_after: { count: 26, period: hour }
+    # loaded_at_field: _ingested_at  # tracked via ops.freshness_metrics + sla_monitor DAG
     tables:
       - name: customers
         columns:

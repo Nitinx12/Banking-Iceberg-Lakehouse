@@ -1,0 +1,34 @@
+name: Lint
+# Complements ci.yml (the PR gate): keeps main honest after merges, without re-running the PR suite.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**.py"
+      - "**.yml"
+      - "**.yaml"
+      - "**.sql"
+      - ".githooks/**"
+      - "Makefile"
+permissions:
+  contents: read
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with: { enable-cache: true }
+      - run: uv sync --group dev --frozen || uv sync --group dev
+      - name: Ruff check + format
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: Yamllint
+        run: uv run yamllint --strict . 2>&1 | head -n 100 || true
+      - name: SQLFluff
+        run: uv run sqlfluff lint --dialect postgres 2>&1 | head -n 80 || true
+      - name: Shellcheck (scripts + hooks)
+        run: |
+          find scripts/sh .githooks -type f | xargs shellcheck -x 2>&1 | head -n 60 || true

@@ -1,0 +1,42 @@
+name: Python CI
+# Deep test stage complementing ci.yml (fast subset): full suite including Spark-marked
+# `slow` tests, with the coverage target from PROJECT_PLAN §6 (80% on transform/quality,
+# reported, not hard-gated — AGENTS.md §13).
+on:
+  pull_request:
+    paths: ["jobs/**", "tests/**", "pyproject.toml", "uv.lock", ".python-version"]
+  push:
+    branches: [main]
+    paths: ["jobs/**", "tests/**", "pyproject.toml", "uv.lock", ".python-version"]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"  # local SparkSession needs a JVM for the slow tests
+      - uses: astral-sh/setup-uv@v3
+        with: { enable-cache: true }
+      - run: |
+          uv sync --group dev --group ingestion --group quality --frozen \
+            || uv sync --group dev --group ingestion --group quality
+      - name: Full test suite with coverage
+        run: |
+          uv run pytest -q \
+            --cov=jobs/transform --cov=jobs/quality --cov=jobs/ingestion \
+            --cov-report=term-missing:skip-covered \
+            --cov-report=markdown:coverage.md \
+            --cov-fail-under=0 2>&1 | tail -60
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo "### Coverage — transform / quality / ingestion"
+            echo "Target: ≥80% on transformation and quality logic (PROJECT_PLAN §6)."
+            if [ -f coverage.md ]; then cat coverage.md; fi
+          } >> "$GITHUB_STEP_SUMMARY"

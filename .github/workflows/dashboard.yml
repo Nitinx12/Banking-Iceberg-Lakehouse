@@ -1,0 +1,35 @@
+name: Dashboard
+# Streamlit app (Architecture 8.4): import-graph sanity + build the container image.
+# The read-only streamlit_reader role is the real gate; CI checks wiring, not data.
+on:
+  pull_request:
+    paths: ["dashboard/**"]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with: { enable-cache: true }
+      - run: uv sync --group dashboard --group dev --frozen || uv sync --group dashboard --group dev
+      - name: Pages import cleanly (no DB needed at import time)
+        run: |
+          uv run python - <<'EOF'
+          import importlib.util, pathlib, sys
+
+          failures = []
+          for page in sorted(pathlib.Path("dashboard").rglob("*.py")):
+              spec = importlib.util.spec_from_file_location(page.stem, page)
+              mod = importlib.util.module_from_spec(spec)
+              try:
+                  spec.loader.exec_module(mod)  # streamlit degrades gracefully off-runner
+              except Exception as e:  # noqa: BLE001 — report every import failure
+                  failures.append(f"{page}: {e}")
+          if failures:
+              print("\n".join(failures), file=sys.stderr)
+              sys.exit(1)
+          print("dashboard imports OK")
+          EOF

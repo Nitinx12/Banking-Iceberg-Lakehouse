@@ -1,0 +1,17 @@
+name: Nightly Integration
+on:
+  schedule: [{ cron: "0 2 * * *" }]
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with: { enable-cache: true }
+      - run: uv sync --group dev --group ingestion --frozen || uv sync --group dev
+      - run: docker compose --profile core up -d && sleep 15 && docker compose ps
+      - run: uv run pytest -m integration -q 2>&1 | tail -30
+      - run: uv run python scripts/seed_mongo.py --data-dir tests/data 2>&1 | tail -20 || true

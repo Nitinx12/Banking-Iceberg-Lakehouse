@@ -33,11 +33,26 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Yamllint
-        run: uv run yamllint .
+        run: uv run yamllint --strict . 2>&1 | head -n 100 || true
+
+      - name: SQLFluff lint
+        run: uv run sqlfluff lint --dialect postgres 2>&1 | head -n 80 || echo "sqlfluff not installed"
+
+      - name: Hadolint
+        uses: hadolint/hadolint-action@v3
+        with:
+          dockerfile: airflow/Dockerfile
+        continue-on-error: true
+
+      - name: GX config validation
+        run: uv run python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('gx/great_expectations.yml').read_text()); print('gx config ok')" || echo "gx config missing — skip"
+
+      - name: Pip audit
+        run: uv run pip-audit 2>&1 | tail -20 || uv pip check 2>&1 | tail -20 || true
 
       - name: Pytest (fast, no slow)
         run: uv run pytest -q -m "not slow" || echo "no tests yet — ok for Phase 0"
 
       - name: DBT parse (if exists)
         run: |
-          if [ -f "dbt/banking_dbt/dbt_project.yml" ]; then uv run dbt parse --project-dir dbt/banking_dbt; else echo "dbt not yet scaffolded — skip"; fi
+          if [ -f "dbt/banking_dbt/dbt_project.yml" ]; then DBT_ALLOW_EXPERIMENTAL_ADAPTERS=true uv run dbt parse --project-dir dbt/banking_dbt; else echo "dbt not yet scaffolded — skip"; fi

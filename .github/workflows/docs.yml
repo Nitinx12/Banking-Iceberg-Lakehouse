@@ -1,0 +1,39 @@
+name: Docs
+on:
+  push: { branches: [main] }
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with: { enable-cache: true }
+      - run: uv sync --group dev || true
+      - name: Generate dbt docs
+        run: |
+          if [ -f "dbt/banking_dbt/dbt_project.yml" ]; then
+            DBT_ALLOW_EXPERIMENTAL_ADAPTERS=true uv run dbt docs generate --project-dir dbt/banking_dbt --target-path docs_site 2>&1 | tail -20 || true
+          fi
+      - name: Assemble docs site
+        run: |
+          mkdir -p public/dq_docs
+          if [ -d "dbt/banking_dbt/docs_site" ]; then cp -r dbt/banking_dbt/docs_site/* public/; fi
+          # GX Data Docs land here when Phase 3 checkpoints write to gx/uncommitted/data_docs
+          if [ -d "gx/uncommitted/data_docs" ]; then cp -r gx/uncommitted/data_docs/* public/dq_docs/; fi
+          if [ ! -f public/index.html ]; then
+            echo "<!doctype html><title>HDFC Banking Data Platform Docs</title><h1>Docs pending first dbt docs generate</h1>" > public/index.html
+          fi
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

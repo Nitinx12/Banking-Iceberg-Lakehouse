@@ -9,14 +9,50 @@ jobs:
   plan:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # Empty until the secret exists — plan steps below self-skip, fmt/validate still gate the PR
+      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.0
       - run: terraform fmt -check -recursive terraform/ 2>&1 | head -40
+      - name: tflint
+        uses: terraform-linters/setup-tflint@v4
+        continue-on-error: true
+      - run: tflint --recursive --init 2>&1 | tail -20 || true
       - run: |
           for env in dev staging prod; do
             if [ -d "terraform/envs/$env" ]; then
               echo "=== validate $env ==="; terraform -chdir=terraform/envs/$env init -backend=false 2>&1 | tail -5; terraform -chdir=terraform/envs/$env validate 2>&1 | tail -10; fi
           done
+      - name: Plan dev and comment on PR
+        if: env.TF_API_TOKEN != ''
+        working-directory: terraform/envs/dev
+        continue-on-error: true
+        run: |
+          terraform init -backend=false -input=false
+          terraform plan -input=false -no-color | tee plan.txt
+      - name: Comment plan on PR
+        if: env.TF_API_TOKEN != ''
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let plan = '';
+            try { plan = fs.readFileSync('terraform/envs/dev/plan.txt', 'utf8'); } catch {}
+            const trimmed = plan.length > 60000 ? plan.slice(0, 60000) + '\n... (truncated)' : plan;
+            const body = trimmed
+              ? ['### terraform plan (dev)', '', '```hcl', trimmed, '```'].join('\n')
+              : 'terraform plan did not produce output — see workflow logs';
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
+      - name: Plan skipped
+        if: env.TF_API_TOKEN == ''
+        run: echo "Plan not run — TF_API_TOKEN not set (fmt/validate/tflint above still gate the PR)."

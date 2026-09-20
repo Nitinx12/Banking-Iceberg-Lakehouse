@@ -1,0 +1,30 @@
+name: Scala
+# flink/ Scala code (DataStream API jobs; Flink SQL lives in flink/sql as plain .sql)
+# AGENTS.md §8: connector versions pinned, checkpoints explicit — sbt pins live in flink/build.sbt
+on:
+  pull_request:
+    paths: ["flink/**"]
+  push:
+    branches: [main]
+    paths: ["flink/**"]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: sbt
+      - name: Build flink jobs (sbt)
+        working-directory: flink
+        run: |
+          if [ -f build.sbt ]; then
+            sbt -batch scalafmtCheckAll scalafixAll --check compile
+          else
+            echo "flink/build.sbt not yet scaffolded (Phase 7) — only Flink SQL present, nothing to compile"
+          fi

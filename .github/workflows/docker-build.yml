@@ -1,0 +1,39 @@
+name: Docker Build
+# Builds every image on PRs touching them (push=false — registry push belongs to cd.yml)
+on:
+  pull_request:
+    paths:
+      - "docker/**"
+      - "airflow/Dockerfile"
+      - "docker-compose.yml"
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: airflow
+            context: .
+            dockerfile: airflow/Dockerfile
+          - name: airflow-alt
+            context: .
+            dockerfile: docker/Dockerfile.airflow
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hadolint/hadolint-action@v3
+        with:
+          dockerfile: ${{ matrix.dockerfile }}
+        continue-on-error: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          tags: banking-lakehouse/${{ matrix.name }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

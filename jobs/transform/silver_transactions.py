@@ -61,11 +61,11 @@ def run(batch_id: str = None):
         WHEN MATCHED THEN UPDATE SET *
         WHEN NOT MATCHED THEN INSERT *
     """)
-    if quarantine.count() > 0:  # single count
-        quarantine.withColumn("_dq_rule", F.lit("amount_check")).write.mode("append").saveAsTable(
-            "banking.quarantine.transactions"
-        )
-    logger.info(
-        f"silver_transactions: wrote {clean.count()} clean, {quarantine.count()} quarantine"
-    )
-    return clean.count()
+    qcnt = quarantine.count()
+    if qcnt > 0:
+        quarantine.withColumn("_dq_rule", F.lit("amount_check")).withColumn(
+            "_quarantined_at", F.current_timestamp()
+        ).write.mode("append").saveAsTable("banking.quarantine.transactions")
+    cnt = clean.count()
+    logger.info(f"silver_transactions: wrote {cnt} clean, {qcnt} quarantine")
+    return cnt

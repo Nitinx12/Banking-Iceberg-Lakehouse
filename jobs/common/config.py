@@ -58,7 +58,7 @@ INGEST_COLLECTIONS = [
 # Collections that are full refresh (small)
 FULL_REFRESH_COLLECTIONS = {"branches"}
 
-# Watermark field per collection — all created_at except branches (profiled docs/profiling.md)
+# Watermark field per collection — all created_at except branches (see ADR 005, profiling docs/profiling.md)
 WATERMARK_FIELDS = {
     "customers": "created_at",
     "accounts": "created_at",

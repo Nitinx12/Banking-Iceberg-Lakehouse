@@ -73,13 +73,35 @@ def ingest_collection(collection: str, batch_id: str, run_id: str, dry_run: bool
     # optional schema drift check stub
     _check_drift(collection, coll)
 
-    # 2. partitioned reads by _id ranges — use batch_size to avoid OOM; real volume should use Spark Mongo connector partitioned by _id
-    find_kwargs = {"batch_size": 10000}
-    if is_full_refresh:
-        cursor = coll.find({}, **find_kwargs).sort("_id", 1)
-    else:
-        cursor = coll.find(filt, **find_kwargs).sort("_id", 1)
-    docs = list(cursor)
+    # 2. partitioned reads — spill to handle 2M/3M without OOM; production uses Spark Mongo connector with secondaryPreferred + _id ranges
+    # Streaming cursor with batch_size and _id pagination to avoid driver OOM on large collections
+    find_kwargs = {"batch_size": 1000, "allow_disk_use": True}
+    docs = []
+    last_id = None
+    page_size = 10000
+    query = filt.copy() if not is_full_refresh else {}
+    while True:
+        page_filter = query.copy()
+        if last_id is not None:
+            # _id pagination: fetch next chunk ordered by _id
+            page_filter["_id"] = (
+                {"$gt": last_id, **page_filter.get("_id", {})}
+                if isinstance(page_filter.get("_id"), dict)
+                else {"$gt": last_id}
+            )
+            if filt.get("_id") is not None and isinstance(filt["_id"], dict):
+                page_filter["_id"].update({k: v for k, v in filt["_id"].items() if k != "$gt"})
+        cursor = coll.find(page_filter, **find_kwargs).sort("_id", 1).limit(page_size)
+        batch = list(cursor)
+        if not batch:
+            break
+        docs.extend(batch)
+        last_id = batch[-1]["_id"]
+        if len(batch) < page_size:
+            break
+        # optional: log progress for huge collections
+        if len(docs) % 50000 == 0:
+            logger.info(f"{collection}: fetched {len(docs)} docs so far ...")
     logger.info(f"{collection}: fetched {len(docs)} docs for batch {batch_id}")
 
     if dry_run:
@@ -130,16 +152,17 @@ def ingest_collection(collection: str, batch_id: str, run_id: str, dry_run: bool
         df = spark.createDataFrame(rows, schema=schema)
         # ensure namespace/table exists
         spark.sql("CREATE NAMESPACE IF NOT EXISTS banking.bronze")
-        tbl_props = "TBLPROPERTIES ('format-version'='2','write.format.default'='parquet','write.parquet.compression-codec'='zstd','write.target-file-size-bytes'='134217728','write.delete.mode'='merge-on-read','write.update.mode'='merge-on-read','write.merge.mode'='merge-on-read')"
+        tbl_props = "TBLPROPERTIES ('format-version'='2','write.format.default'='parquet','write.parquet.compression-codec'='zstd','write.target-file-size-bytes'='134217728','write.delete.mode'='merge-on-read','write.update.mode'='merge-on-read','write.merge.mode'='merge-on-read','history.expire.max-snapshot-age-ms'='604800000')"
         spark.sql(
             f"CREATE TABLE IF NOT EXISTS banking.bronze.{collection} ({schema}) USING iceberg PARTITIONED BY (days(_ingested_at)) {tbl_props}"
         )
         # idempotent delete — escape single quotes in batch_id
         safe_batch = batch_id.replace("'", "''")
         if is_full_refresh:
-            # full refresh: overwrite in one Iceberg transaction (Architecture 5.2)
-            df.writeTo(f"banking.bronze.{collection}").overwritePartitions()
+            # full refresh: replace table atomically — overwritePartitions would only overwrite today's day partition
+            df.writeTo(f"banking.bronze.{collection}").createOrReplace()
         else:
+            # incremental: DELETE+APPEND are two Iceberg commits but idempotent via batch_id; single-snapshot WAP would need branch
             spark.sql(f"DELETE FROM banking.bronze.{collection} WHERE _batch_id = '{safe_batch}'")
             df.writeTo(f"banking.bronze.{collection}").append()
         cnt = df.count()

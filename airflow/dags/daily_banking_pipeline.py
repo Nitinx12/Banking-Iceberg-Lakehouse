@@ -9,11 +9,20 @@ from datetime import datetime, timedelta
 from airflow.decorators import dag, task, task_group
 from airflow.exceptions import AirflowFailException
 
+
+def _on_failure(context):
+    # structured alert stub per Architecture 9.2 — Alertmanager/Slack hook wired via airflow/include
+    ti = context.get("task_instance")
+    print(
+        f"[alert] task {ti.task_id} failed dag {ti.dag_id} run {ti.run_id} — see ops.pipeline_runs and runbook docs/runbooks/dag_failure.md"
+    )
+
+
 default_args = {
     "retries": 2,
     "retry_delay": timedelta(minutes=2),
     "execution_timeout": timedelta(hours=1),
-    "on_failure_callback": None,  # TODO: structured alert per Architecture 9.2
+    "on_failure_callback": _on_failure,
 }
 
 
@@ -44,22 +53,53 @@ def daily_banking_pipeline():
 
     @task
     def bronze_dq(batch_id: str):
+        from pyspark.sql.functions import col
+
+        import jobs.common.config as cfg
+
+        # Real Bronze DQ: validate row counts + not_null _id per collection per Architecture 11.1 layer 2
+        # GX bronze checkpoint wired later; here use Spark to validate Bronze tables
+        from jobs.common.spark import get_spark
         from jobs.quality.checks import write_dq_result
 
-        # GX bronze checkpoint — fail-closed: missing _id or duplicate stops Silver
-        # placeholder: run gx checkpoint bronze; here simulate pass
-        write_dq_result(
-            "airflow",
-            batch_id,
-            "bronze",
-            "customers",
-            "not_null__id",
-            "gx",
-            "critical",
-            "pass",
-            0,
-            1,
-        )
+        spark = get_spark("bronze_dq")
+        fail = False
+        for coll in cfg.INGEST_COLLECTIONS:
+            tbl = f"banking.bronze.{coll}"
+            if not spark.catalog.tableExists(tbl):
+                write_dq_result(
+                    "airflow",
+                    batch_id,
+                    "bronze",
+                    coll,
+                    "table_exists",
+                    "gx",
+                    "critical",
+                    "fail",
+                    0,
+                    1,
+                )
+                fail = True
+                continue
+            total = spark.table(tbl).count()
+            null_id = spark.table(tbl).filter(col("_id").isNull()).count()
+            status = "pass" if total > 0 and null_id == 0 else "fail"
+            write_dq_result(
+                "airflow",
+                batch_id,
+                "bronze",
+                coll,
+                "not_null__id",
+                "gx",
+                "critical",
+                status,
+                null_id,
+                total,
+            )
+            if status == "fail":
+                fail = True
+        if fail:
+            raise AirflowFailException("bronze_dq failed — quarantine, alert, stop")
         return batch_id
 
     @task.branch
@@ -158,16 +198,16 @@ def daily_banking_pipeline():
     bid = ingest_mongo_batch()
     b_dq = bronze_dq(bid)
     gate = bronze_gate(b_dq)
-    silv = silver(b_dq)
-    s_dq = silver_dq(b_dq)
-    gld = gold(b_dq)
-    g_dq = gold_dq(b_dq)
-    pub = publish_serving(b_dq)
+    silv = silver(gate)
+    s_dq = silver_dq(silv)
+    gld = gold(s_dq)
+    g_dq = gold_dq(gld)
+    publish_serving(g_dq)
+    qa = quarantine_alert(b_dq)
 
-    # branch: bronze_gate chooses silver vs quarantine_alert
-    # Airflow BranchPythonOperator semantics: downstream of gate
-    bid >> b_dq >> gate >> [silv, quarantine_alert]
-    silv >> s_dq >> gld >> g_dq >> pub
+    # branch: bronze_gate chooses silver task_group vs quarantine_alert
+    bid >> b_dq >> gate >> [silv, qa]
+    # linear chain after gate success: silver -> silver_dq -> gold -> gold_dq -> publish
 
 
 daily_banking_pipeline()

@@ -1,0 +1,10 @@
+# Flink config — checkpoint every 60s exactly-once per Architecture 10.3
+execution.checkpointing.interval: 60s
+execution.checkpointing.mode: EXACTLY_ONCE
+execution.checkpointing.timeout: 10min
+state.backend: rocksdb
+state.checkpoints.dir: s3://banking-lakehouse/local/checkpoints/flink
+state.savepoints.dir: s3://banking-lakehouse/local/checkpoints/flink/savepoints
+restart-strategy: fixed-delay
+restart-strategy.fixed-delay.attempts: 3
+restart-strategy.fixed-delay.delay: 10s

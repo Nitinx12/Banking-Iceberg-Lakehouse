@@ -16,9 +16,8 @@ def get_spark(app_name="banking_bronze") -> SparkSession:
     # Windows: ensure workers use venv python, not Store stub
     os.environ["PYSPARK_PYTHON"] = sys.executable
     os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
-    # Iceberg + S3A dependencies are provided via --packages at submission:
-    # org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.0, org.postgresql:postgresql:42.7.4,
-    # org.apache.hadoop:hadoop-aws:3.4.1, com.amazonaws:aws-java-sdk-bundle:1.12.780
+    # Iceberg + S3A dependencies are provided via --packages at submission.
+    # Pinned to iceberg 1.5.2 + hadoop-aws 3.3.4 to match Spark 3.5.5 bundled Hadoop 3.3.4 (BulkDelete compat).
     # For local `uv run` we rely on pyspark's built-in Hadoop; S3A creds via env.
     builder = (
         SparkSession.builder.appName(app_name)

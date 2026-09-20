@@ -62,6 +62,7 @@ gx/uncommitted/
 test-results/
 htmlcov/
 .coverage
+.freebuff/
 
 # OS
 Thumbs.db

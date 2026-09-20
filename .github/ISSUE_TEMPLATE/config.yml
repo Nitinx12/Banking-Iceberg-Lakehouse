@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or discussion
+    url: https://github.com/Nitinx12/Databricks-Streamflix-Lakehouse/discussions
+    about: Ask usage questions here before filing an issue.
+  - name: Architecture & design
+    url: https://github.com/Nitinx12/Databricks-Streamflix-Lakehouse/blob/main/Architecture.md
+    about: Read Architecture.md (esp. ADRs §20) before proposing design changes.

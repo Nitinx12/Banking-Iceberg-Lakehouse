@@ -1,0 +1,40 @@
+# .github/labeler.yml — path filters for actions/labeler (paired with .github/workflows/)
+ingestion:
+  - changed-files:
+      - any-glob-to-any-file: ["jobs/ingestion/**", "scripts/**", "contracts/**"]
+
+transform:
+  - changed-files:
+      - any-glob-to-any-file: ["jobs/transform/**", "dbt/**"]
+
+quality:
+  - changed-files:
+      - any-glob-to-any-file: ["jobs/quality/**", "gx/**", "tests/**"]
+
+serving:
+  - changed-files:
+      - any-glob-to-any-file: ["jobs/publish/**", "sql/**", "dashboard/**"]
+
+orchestration:
+  - changed-files:
+      - any-glob-to-any-file: ["airflow/**"]
+
+streaming:
+  - changed-files:
+      - any-glob-to-any-file: ["flink/**"]
+
+iac:
+  - changed-files:
+      - any-glob-to-any-file: ["terraform/**"]
+
+monitoring:
+  - changed-files:
+      - any-glob-to-any-file: ["monitoring/**"]
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: [".github/**", ".githooks/**", "Makefile", "tasks.bat"]
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file: ["**/*.md"]

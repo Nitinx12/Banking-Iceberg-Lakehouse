@@ -1,0 +1,57 @@
+name: Bug report
+description: Something in the platform is broken or producing wrong results
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check `ops.pipeline_runs` / `ops.dq_results` and the relevant stage log in
+        `logs/` before filing — every pipeline stage writes run_id and batch_id for traceability.
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Affected layer
+      options:
+        - ingestion (Mongo → Bronze)
+        - transform (Silver/Gold, dbt)
+        - quality (GX, custom checks, gate)
+        - serving (PostgreSQL publish, dashboard)
+        - orchestration (Airflow DAGs)
+        - monitoring (Prometheus, Grafana, alerts)
+        - infrastructure (compose, Terraform, CI)
+        - other
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity (Architecture 11.2)
+      options:
+        - critical — data wrong/missing in a way that misleads consumers
+        - high — significant defect, blocks Gold publish
+        - warn — drift or minor defect, pipeline continues
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Include run_id / batch_id if you have them.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. make up PROFILE=core
+        2. make ingest
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste the relevant stage log lines (redact credentials).
+      render: shell

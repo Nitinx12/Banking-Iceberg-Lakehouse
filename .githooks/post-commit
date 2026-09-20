@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# .githooks/post-commit — quiet summary of what just landed (commit-msg already validated format).
+set -uo pipefail
+
+subject=$(git log -1 --format='%s')
+short=$(git rev-parse --short HEAD)
+echo "✓ ${short} ${subject}"
+
+# nudge only when there is more uncommitted work in the same area
+remaining=$(git status --porcelain | wc -l | tr -d ' ')
+if [ "${remaining}" -gt 0 ]; then
+  echo "ℹ ${remaining} path(s) still uncommitted — git status to review"
+fi

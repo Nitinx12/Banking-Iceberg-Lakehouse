@@ -2,12 +2,13 @@
 # .githooks/pre-push — budget <90s (Architecture 16.3)
 set -euo pipefail
 
-echo "pre-push: running make test_fast..."
+echo "pre-push: running fast unit tests (unit only — integration needs compose up)"
 
+# integration tests need the compose core profile up — nightly job runs them (nightly_integration.yml)
 if command -v uv >/dev/null 2>&1; then
-  uv run pytest -q -m "not slow" 2>&1 | tail -20
+  uv run pytest -q -m "not slow and not integration" 2>&1 | tail -20
 else
-  pytest -q -m "not slow" 2>&1 | tail -20 || echo "pytest not installed — skipping (CI will check)"
+  pytest -q -m "not slow and not integration" 2>&1 | tail -20 || echo "pytest not installed — skipping (CI will check)"
 fi
 
 # dbt parse if project exists — allow experimental postgres on dbt Fusion

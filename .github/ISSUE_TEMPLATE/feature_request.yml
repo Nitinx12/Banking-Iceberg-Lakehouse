@@ -1,0 +1,40 @@
+name: Feature request
+description: Propose a new capability or improvement
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Related phase (PROJECT_PLAN.md)
+      description: Pick the phase this belongs to, or propose out-of-plan work.
+      options:
+        - "Phase 1 — Ingestion and Bronze"
+        - "Phase 2 — Silver and Gold"
+        - "Phase 3 — Data quality"
+        - "Phase 4 — Serving and Streamlit (MVP)"
+        - "Phase 5 — Observability, SLA, SLO, freshness"
+        - "Phase 6 — IaC and CI/CD hardening"
+        - "Phase 7 — Flink streaming (stretch)"
+        - "Phase 8 — Hardening and release"
+        - "Not in the current plan"
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or gap
+      description: What can't you do today? What does it block?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Sketch the approach; note design principle conflicts (Architecture.md §2) if any.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Including "do nothing" — and which ADR this would need to revise.

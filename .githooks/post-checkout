@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# .githooks/post-checkout — non-blocking convenience reminders after switching branches.
+# Never fails the checkout: new-branch scaffolding or a missing .env is not fatal.
+set -uo pipefail
+
+# Flag stale deps when the new branch pins different dependencies than we have installed.
+# (uv.lock is committed, so a checkout that changes it means the venv may be out of date.)
+if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -q '^uv\.lock$'; then
+  echo "⚠ uv.lock changed on this branch — run: make setup (or uv sync)"
+fi
+
+# First checkout on a fresh clone: point at the README quick start.
+if [ ! -f .env ] && [ -f .env.example ]; then
+  echo "ℹ no .env yet — run: make env, then edit secrets (never committed)"
+fi

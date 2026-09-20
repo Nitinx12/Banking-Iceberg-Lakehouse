@@ -1,0 +1,40 @@
+# .editorconfig — editor defaults; ruff/pyproject.toml remain the source of truth for Python
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Python mirrors ruff (pyproject.toml: line-length 100, target py311)
+[*.py]
+indent_size = 4
+max_line_length = 100
+
+# Bash per AGENTS.md §10 (set -euo pipefail style, 4-space)
+[*.sh]
+indent_size = 4
+
+# Windows automation keeps CRLF so cmd.exe never chokes
+[*.{cmd,bat}]
+end_of_line = crlf
+indent_size = 4
+
+[*.ps1]
+indent_size = 4
+
+# Make requires tabs
+[{Makefile,*.mk}]
+indent_style = tab
+
+[*.tf]
+indent_size = 2
+
+[*.sql]
+indent_size = 4
+
+[*.scala]
+indent_size = 2

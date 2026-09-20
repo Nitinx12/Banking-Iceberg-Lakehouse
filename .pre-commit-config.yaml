@@ -1,0 +1,33 @@
+# .pre-commit-config.yaml — optional mirror of the native .githooks (ADR 7).
+# The repo's primary gate is `make hooks` (core.hooksPath=.githooks); this file
+# exists for contributors who use the pre-commit framework directly.
+# Install: uv run pre-commit install && uv run pre-commit run --all-files
+repos:
+  # mirrors .githooks/pre-commit large-file + yaml hygiene checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: (\.bat$|\.cmd$|\.ps1$)
+      - id: end-of-file-fixer
+        exclude: (\.bat$|\.cmd$|\.ps1$)
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        exclude: (^docker-compose\.yml$)  # ${...:?} interpolations are not valid YAML tags
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+
+  # mirrors .githooks/pre-commit ruff format + lint (pyproject: line 100, py311)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # mirrors .githooks/pre-commit secret scan
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks

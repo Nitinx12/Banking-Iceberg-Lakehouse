@@ -23,33 +23,35 @@ Fill this file (or drop files) and I will scaffold next phases.
    Watermarks: all incremental on created_at (+_id tiebreaker for 2M/3M), branches=full refresh. Overlap 10m.
 
 ----------------------------------------------------------------
-3. DATABRICKS WORKSPACE TIER (ADR 3 — Architecture 6.1) — PENDING
-   [ ] Community Edition (no Terraform/Jobs API — fallback to Delta for Silver/Gold)
-   [ ] Trial / Paid (supports Iceberg via Unity Catalog + Jobs API)
-   If trial/paid, share: DATABRICKS_HOST = https://...cloud.databricks.com
+3. DATABRICKS WORKSPACE TIER (ADR 3 — Architecture 6.1) — DONE
+   [x] Community Edition (no Terraform/Jobs API — fallback to Delta for Silver/Gold)
 
 ----------------------------------------------------------------
-4. CLOUD PROVIDER for object storage + Terraform state (Architecture 15.2) — PENDING
-   [x] Local only (MinIO — already in docker-compose core) ← default unless you say AWS
-   [ ] AWS S3 — bucket warehouse: ___  tfstate: ___
-   [ ] Other: ___
+4. CLOUD PROVIDER for object storage + Terraform state (Architecture 15.2) — DONE
+   [x] Local only (MinIO — already in docker-compose core)
 
 ----------------------------------------------------------------
-5. REFRESH CADENCE per collection (Architecture 21.5) — PENDING
-   Default if you skip: all daily incremental, branches full refresh, Flink streaming deferred to Phase 7.
-   To override, mark: [daily / hourly / streaming]
-   customers:    ___
-   accounts:     ___
-   transactions: ___  etc.
+5. REFRESH CADENCE per collection (Architecture 21.5) — DONE (using stated defaults)
+   customers:         daily
+   accounts:          daily
+   transactions:      daily
+   branches:          full refresh
+   loans:             daily
+   cards:             daily
+   card_transactions: daily
+   loan_payments:     daily
+   support_tickets:   daily
+   employees:         daily
+   (Flink streaming deferred to Phase 7 — moot anyway on Community Edition, no Jobs API for a streaming trigger)
 
 ----------------------------------------------------------------
-6. MONTHLY CLOUD BUDGET ceiling (PROJECT_PLAN 11, Architecture 21.6) — PENDING
-   Budget USD/month: ___  (leave blank = local dev only, minimal cloud cost)
+6. MONTHLY CLOUD BUDGET ceiling (PROJECT_PLAN 11, Architecture 21.6) — DONE
+   Budget USD/month: (blank) — local dev only, minimal cloud cost
 
 ----------------------------------------------------------------
-7. ALERT ROUTING (Architecture 12.2, 13) — PENDING
-   SLACK_WEBHOOK_URL: ___  (skip for now = ok)
-   ALERT_EMAIL_TO:    ___
+7. ALERT ROUTING (Architecture 12.2, 13) — DONE
+   SLACK_WEBHOOK_URL: (skip)
+   ALERT_EMAIL_TO:    (skip)
 
 ----------------------------------------------------------------
 8. BUSINESS TIMEZONE & LOCALE — SET
@@ -62,17 +64,18 @@ Fill this file (or drop files) and I will scaffold next phases.
 
 ----------------------------------------------------------------
 10. ANYTHING ELSE — OPTIONAL
-   Notes:
+   Notes: Community Edition selected → Silver/Gold land as Delta, not Iceberg. No Terraform, no Databricks Jobs API — Phase 1 orchestration needs a non-Databricks scheduler (e.g. cron, Airflow, or a plain Python runner) for the batch job.
 
 ================================================================
-STATUS: 1-2 DONE ✓ (2026-09-20) — 3-10 PENDING (need your input to start Phase 1)
+STATUS: 1-9 DONE ✓ — Phase 1 unblocked
 ================================================================
 How to provide:
 - Edit this file directly, or reply in chat. Keep secrets in .env only — do NOT paste tokens here.
 - After you fill, run: git add file.txt && git commit -m "docs: provide HDFC info for Phase 1"
 
 Done (Phase 0):
-- Profiled 10 collections (docs/profiling.md), contracts/*.yml created, sample data tests/data/*.json added, .env + compose core ready.
+- Profiled 10 collections (docs/profiling.md), contracts/*.yml created, sample data tests/data/*.json added, .env + compose core ready. CE path confirmed per Architecture 6.1 ADR 3 fallback.
 
-Next (Phase 1 — needs your input on 3-10 above):
-- Spark session factory (Iceberg JDBC catalog on postgres + S3 MinIO), Bronze DDL per contracts (Architecture 5.3 _doc/_op/_source_ts/_ingested_at/_batch_id/_doc_hash), ops.ingestion_watermarks + pipeline_runs, batch job (watermark read → overlap 10m → secondaryPreferred partitioned reads → _batch_id idempotent delete-before-write → advance watermark)
+Next (Phase 1 — Community Edition: local Spark/Iceberg JDBC + S3 MinIO, Bronze append on Iceberg, Silver/Gold Delta fallback):
+- Spark session factory (Iceberg JDBC catalog on postgres + S3 MinIO), Bronze DDL per contracts (Architecture 5.3), ops tables, batch job (watermark overlap 10m + _batch_id idempotent), non-Databricks scheduler (Airflow/cron/Python runner).
+- Decision: ADR 3 recorded — CE cannot use Unity Catalog Iceberg for Silver/Gold → Delta fallback as designed.

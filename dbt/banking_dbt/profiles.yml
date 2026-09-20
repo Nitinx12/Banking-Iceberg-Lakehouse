@@ -15,6 +15,7 @@ banking_dbt:
     dev_local:
       type: postgres
       host: "{{ env_var('POSTGRES_HOST', 'postgres') }}"
+      port: "{{ env_var('POSTGRES_PORT', '5433') | int }}"
       user: "{{ env_var('POSTGRES_USER', 'postgres') }}"
       pass: "{{ env_var('POSTGRES_PASSWORD', '') }}"
       dbname: "{{ env_var('POSTGRES_WAREHOUSE_DB', 'banking_dw') }}"

@@ -34,15 +34,19 @@ BEGIN
 END $$;
 
 -- Grants
-GRANT USAGE ON SCHEMA serving, ops, rt TO etl_writer, dq_writer, streamlit_reader, grafana_reader;
+GRANT USAGE ON SCHEMA serving, ops, rt, quarantine TO etl_writer, dq_writer, streamlit_reader, grafana_reader;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA serving, ops, rt, quarantine TO etl_writer;
+GRANT INSERT ON ALL TABLES IN SCHEMA ops TO dq_writer;
 GRANT SELECT ON ALL TABLES IN SCHEMA serving, rt TO streamlit_reader;
 GRANT SELECT ON ALL TABLES IN SCHEMA ops TO grafana_reader, streamlit_reader;
 ALTER DEFAULT PRIVILEGES IN SCHEMA serving GRANT SELECT ON TABLES TO streamlit_reader;
 ALTER DEFAULT PRIVILEGES IN SCHEMA ops GRANT SELECT ON TABLES TO grafana_reader, streamlit_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA ops GRANT INSERT ON TABLES TO dq_writer;
+ALTER DEFAULT PRIVILEGES IN SCHEMA serving, ops, rt, quarantine GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO etl_writer;
 
 -- Ops tables used by pipeline (stubs — full DDL in later phases)
 CREATE TABLE IF NOT EXISTS ops.pipeline_runs (
-  run_id text PRIMARY KEY,
+  run_id text,
   batch_id text,
   stage text,
   status text,
@@ -51,8 +55,19 @@ CREATE TABLE IF NOT EXISTS ops.pipeline_runs (
   rows_rejected bigint,
   duration_ms bigint,
   started_at timestamptz DEFAULT now(),
-  finished_at timestamptz
+  finished_at timestamptz,
+  PRIMARY KEY (run_id, stage)
 );
+-- migrate existing single-PK table if needed
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name='pipeline_runs_pkey' AND table_name='pipeline_runs' AND table_schema='ops') THEN
+    -- check if PK is only run_id, then fix
+    IF (SELECT count(*) FROM information_schema.key_column_usage WHERE constraint_name='pipeline_runs_pkey' AND table_schema='ops' AND table_name='pipeline_runs') = 1 THEN
+      ALTER TABLE ops.pipeline_runs DROP CONSTRAINT pipeline_runs_pkey;
+      ALTER TABLE ops.pipeline_runs ADD PRIMARY KEY (run_id, stage);
+    END IF;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS ops.ingestion_watermarks (
   source_collection text PRIMARY KEY,

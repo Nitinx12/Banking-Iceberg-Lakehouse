@@ -73,8 +73,12 @@ def ingest_collection(collection: str, batch_id: str, run_id: str, dry_run: bool
     # optional schema drift check stub
     _check_drift(collection, coll)
 
-    # 2. partitioned reads by _id ranges — count then fetch (for local dev we fetch all; real volume partitions by _id)
-    cursor = coll.find(filt).sort("_id", 1) if not is_full_refresh else coll.find({}).sort("_id", 1)
+    # 2. partitioned reads by _id ranges — use batch_size to avoid OOM; real volume should use Spark Mongo connector partitioned by _id
+    find_kwargs = {"batch_size": 10000}
+    if is_full_refresh:
+        cursor = coll.find({}, **find_kwargs).sort("_id", 1)
+    else:
+        cursor = coll.find(filt, **find_kwargs).sort("_id", 1)
     docs = list(cursor)
     logger.info(f"{collection}: fetched {len(docs)} docs for batch {batch_id}")
 
@@ -119,19 +123,25 @@ def ingest_collection(collection: str, batch_id: str, run_id: str, dry_run: bool
             )
         )
 
-    # 4. write to Iceberg — idempotent delete by _batch_id before write
+    # 4. write to Iceberg — idempotent delete by _batch_id before write, full-refresh overwrite per Architecture 5.2
     spark = get_spark()
     schema = "_id STRING, _doc STRING, _op STRING, _source_ts TIMESTAMP, _ingested_at TIMESTAMP, _batch_id STRING, _run_id STRING, _source_collection STRING, _schema_version STRING, _doc_hash STRING"
     if rows:
         df = spark.createDataFrame(rows, schema=schema)
         # ensure namespace/table exists
         spark.sql("CREATE NAMESPACE IF NOT EXISTS banking.bronze")
+        tbl_props = "TBLPROPERTIES ('format-version'='2','write.format.default'='parquet','write.parquet.compression-codec'='zstd','write.target-file-size-bytes'='134217728','write.delete.mode'='merge-on-read','write.update.mode'='merge-on-read','write.merge.mode'='merge-on-read')"
         spark.sql(
-            f"CREATE TABLE IF NOT EXISTS banking.bronze.{collection} ({schema}) USING iceberg PARTITIONED BY (days(_ingested_at)) TBLPROPERTIES ('format-version'='2','write.format.default'='parquet')"
+            f"CREATE TABLE IF NOT EXISTS banking.bronze.{collection} ({schema}) USING iceberg PARTITIONED BY (days(_ingested_at)) {tbl_props}"
         )
-        # idempotent delete
-        spark.sql(f"DELETE FROM banking.bronze.{collection} WHERE _batch_id = '{batch_id}'")
-        df.writeTo(f"banking.bronze.{collection}").append()
+        # idempotent delete — escape single quotes in batch_id
+        safe_batch = batch_id.replace("'", "''")
+        if is_full_refresh:
+            # full refresh: overwrite in one Iceberg transaction (Architecture 5.2)
+            df.writeTo(f"banking.bronze.{collection}").overwritePartitions()
+        else:
+            spark.sql(f"DELETE FROM banking.bronze.{collection} WHERE _batch_id = '{safe_batch}'")
+            df.writeTo(f"banking.bronze.{collection}").append()
         cnt = df.count()
         logger.info(
             f"{collection}: wrote {cnt} rows to banking.bronze.{collection} batch {batch_id}"
@@ -161,20 +171,45 @@ def _check_drift(collection: str, coll):
         return
     try:
         contract = yaml.safe_load(contract_path.read_text())
-        required = {f["name"] for f in contract.get("fields", []) if f.get("required")}
+        field_defs = {f["name"]: f for f in contract.get("fields", [])}
+        required = {n for n, fd in field_defs.items() if fd.get("required")}
         sample = coll.find_one()
         if sample is None:
             return
-        # normalize _id key
         keys = set(sample.keys())
         missing_required = required - keys
         if missing_required:
             logger.error(
                 f"{collection}: drift — missing required fields {missing_required} — policy fail per contract"
             )
-            # fail closed: quarantine batch, alert (Phase 1 stub raises)
             raise ValueError(f"drift fail for {collection}: missing {missing_required}")
-        new_fields = keys - {f["name"] for f in contract.get("fields", [])}
+        # type change check — fail closed per 5.4
+        for fname, fdef in field_defs.items():
+            if fname in sample:
+                expected = fdef.get("type")
+                actual = type(sample[fname]).__name__
+                # simple mapping: int->int, long->int, double->float, decimal->float, string->str, timestamp->datetime
+                type_map = {
+                    "int": "int",
+                    "long": "int",
+                    "double": "float",
+                    "decimal": "float",
+                    "string": "str",
+                    "timestamp": "datetime",
+                    "date": "str",
+                    "boolean": "bool",
+                }
+                exp_py = type_map.get(expected, expected)
+                if exp_py and exp_py not in actual.lower():
+                    # allow int vs float for decimal
+                    if not (exp_py == "float" and "int" in actual.lower()):
+                        logger.error(
+                            f"{collection}: drift — type change {fname}: expected {expected} ({exp_py}) got {actual} — fail closed"
+                        )
+                        raise ValueError(
+                            f"drift fail for {collection}: type change {fname} {expected}->{actual}"
+                        )
+        new_fields = keys - set(field_defs.keys())
         if new_fields:
             logger.warning(f"{collection}: drift — new fields {new_fields} — warn per contract")
     except Exception as e:
@@ -200,7 +235,7 @@ def _record_run(run_id, batch_id, stage, status, rows_read, rows_written):
         with eng.begin() as conn:
             conn.execute(
                 text(
-                    "INSERT INTO ops.pipeline_runs (run_id, batch_id, stage, status, rows_read, rows_written, started_at, finished_at) VALUES (:r,:b,:s,:st,:rr,:rw, now(), now()) ON CONFLICT (run_id) DO UPDATE SET batch_id=:b, stage=:s, status=:st, rows_read=:rr, rows_written=:rw, finished_at=now()"
+                    "INSERT INTO ops.pipeline_runs (run_id, batch_id, stage, status, rows_read, rows_written, started_at, finished_at) VALUES (:r,:b,:s,:st,:rr,:rw, now(), now()) ON CONFLICT (run_id, stage) DO UPDATE SET batch_id=:b, status=:st, rows_read=:rr, rows_written=:rw, finished_at=now()"
                 ),
                 {
                     "r": run_id,

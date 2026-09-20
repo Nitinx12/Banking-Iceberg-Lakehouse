@@ -40,7 +40,10 @@ def get_watermark(collection: str):
             if row is None:
                 return None, None
             return row[0], row[1]
-    except Exception:
+    except Exception as e:
+        from jobs.common.logging import get_logger
+
+        get_logger("watermark").warning(f"get_watermark failed for {collection}: {e}")
         return None, None
 
 
@@ -57,13 +60,16 @@ def advance_watermark(collection: str, new_watermark: datetime, batch_id: str):
                     """
                     INSERT INTO ops.ingestion_watermarks (source_collection, last_watermark, last_batch_id, updated_at)
                     VALUES (:c, :w, :b, now())
-                    ON CONFLICT (source_collection) DO UPDATE SET last_watermark=:w, last_batch_id=:b, updated_at=now()
+                    ON CONFLICT (source_collection) DO UPDATE SET last_watermark=GREATEST(ops.ingestion_watermarks.last_watermark, :w), last_batch_id=:b, updated_at=now()
                     """
                 ),
                 {"c": collection, "w": new_watermark, "b": batch_id},
             )
-    except Exception:
-        pass
+    except Exception as e:
+        from jobs.common.logging import get_logger
+
+        get_logger("watermark").warning(f"advance_watermark failed for {collection}: {e}")
+        raise
 
 
 def watermark_filter(collection: str):

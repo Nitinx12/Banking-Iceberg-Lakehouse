@@ -1,0 +1,16 @@
+name: bronze
+config_version: 1.0
+class_name: Checkpoint
+validations:
+  - batch_request:
+      datasource_name: spark
+      data_connector_name: default_runtime_data_connector
+      data_asset_name: bronze
+    expectation_suite_name: bronze
+    action_list:
+      - name: store_validation_result
+        action: { class_name: StoreValidationResultAction }
+      - name: store_evaluation_params
+        action: { class_name: StoreEvaluationParametersAction }
+      - name: update_data_docs
+        action: { class_name: UpdateDataDocsAction }

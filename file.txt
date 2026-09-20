@@ -1,0 +1,81 @@
+HDFC Banking Data Platform — What I Need From You
+Branch: hdfc/bank-initial | Docs: Architecture.md + PROJECT_PLAN.md Phase 0-1
+Fill this file (or drop files) and I will scaffold next phases.
+
+================================================================
+1. SAMPLE DOCUMENTS — 1 JSON doc per actual Mongo collection
+   Paste 1 example document per collection OR drop JSON files in tests/data/
+   Collections expected (Architecture 5.1): customers, accounts, transactions, branches, loans, cards
+   If your collections are named differently, list actual names here.
+
+   customers:    { paste 1 doc here or say file path }
+   accounts:     { }
+   transactions: { }
+   branches:     { }
+   loans:        { }
+   cards:        { }
+   other:        { list any extra collections }
+
+   Also drop: tests/data/*.json  or  data/mongodump/  or connection string to existing Mongo
+----------------------------------------------------------------
+2. VOLUME & GROWTH (Architecture 21.1)
+   Approx rows per collection today and monthly growth:
+   customers:    __ rows, +__ /month
+   accounts:     __
+   transactions: __
+   etc.
+
+----------------------------------------------------------------
+3. DATABRICKS WORKSPACE TIER (ADR 3 — Architecture 6.1)
+   [ ] Community Edition (no Terraform/Jobs API — fallback to Delta for Silver/Gold)
+   [ ] Trial / Paid (supports Iceberg via Unity Catalog + Jobs API)
+   If trial/paid, share: DATABRICKS_HOST = https://...cloud.databricks.com
+                        (token will be set via .env, do NOT paste real token here)
+
+----------------------------------------------------------------
+4. CLOUD PROVIDER for object storage + Terraform state (Architecture 15.2)
+   [ ] AWS S3
+   [ ] Local only (MinIO — already in docker-compose core)
+   [ ] Other: ___
+   If AWS: bucket name for warehouse + bucket for tfstate: ___
+
+----------------------------------------------------------------
+5. REFRESH CADENCE per collection (Architecture 21.5)
+   Daily / Hourly / Near-real-time (Flink Phase 7)
+   customers:    [ ] daily [ ] hourly [ ] streaming
+   accounts:     [ ] daily [ ] hourly [ ] streaming
+   transactions: [ ] daily [ ] hourly [ ] streaming
+   branches:     [ ] full refresh daily
+   etc.
+
+----------------------------------------------------------------
+6. MONTHLY CLOUD BUDGET ceiling (PROJECT_PLAN 11, Architecture 21.6)
+   Budget USD per month: ___  (decides cluster sizes, how long dev/staging stay up)
+
+----------------------------------------------------------------
+7. ALERT ROUTING (Architecture 12.2, 13)
+   SLACK_WEBHOOK_URL: ___  (or say "skip for now")
+   ALERT_EMAIL_TO:    ___
+
+----------------------------------------------------------------
+8. BUSINESS TIMEZONE & LOCALE
+   BUSINESS_TIMEZONE (Architecture 1.4): [x] Asia/Kolkata  [ ] other: ___
+
+----------------------------------------------------------------
+9. DATASET LOCATION (if you already have a Mongo dump)
+   Path or download link: ___
+   Format: [ ] mongodump  [ ] JSON export  [ ] CSV
+
+----------------------------------------------------------------
+10. ANYTHING ELSE
+   Extra notes, PII rules, compliance, or links to manager's docs:
+
+================================================================
+How to provide:
+- Edit this file directly, or drop files in tests/data/, or paste docs in chat.
+- Keep secrets (tokens/passwords) in .env only — do NOT paste real secrets here.
+- After you fill, run: git add file.txt tests/data/*.json && git commit -m "docs: provide HDFC dataset info"
+
+Next steps after you provide:
+- I will profile collections, finalize watermark fields (updated_at/created_at), and write contracts/*.yml
+- Then scaffold Phase 1: Spark Iceberg session + Bronze DDL + ingestion job (watermark + overlap + _batch_id idempotent)

@@ -1,0 +1,113 @@
+name: hdfc-bank-lakehouse
+
+services:
+  # --- core profile: postgres + mongo replica set + minio (Architecture 4.2) ---
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["core"]
+    container_name: banking_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      POSTGRES_DB: ${POSTGRES_WAREHOUSE_DB:-banking_dw}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/init_postgres.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_WAREHOUSE_DB:-banking_dw}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mongo:
+    image: mongo:7.0
+    profiles: ["core"]
+    container_name: banking_mongo
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?set in .env}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-banking}
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongodata:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok' --username ${MONGO_INITDB_ROOT_USERNAME:-admin} --password ${MONGO_INITDB_ROOT_PASSWORD:?set in .env} --authenticationDatabase admin || mongosh --quiet --eval \"db.adminCommand('ping').ok\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mongo-init:
+    image: mongo:7.0
+    profiles: ["core"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        echo "initiating replica set rs0..."
+        mongosh --host mongo:27017 -u $${MONGO_INITDB_ROOT_USERNAME} -p $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --eval '
+          try { rs.status(); print("rs already initiated"); }
+          catch(e) { rs.initiate({_id:"rs0", members:[{_id:0, host:"mongo:27017"}]}); print("rs initiated"); }
+        '
+        # wait for PRIMARY
+        for i in 1 2 3 4 5 6 7 8 9 10; do
+          STATE=$$(mongosh --host mongo:27017 -u $${MONGO_INITDB_ROOT_USERNAME} -p $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --quiet --eval 'rs.status().ok' || echo 0)
+          if [ "$$STATE" = "1" ]; then echo "mongo RS ready"; exit 0; fi
+          sleep 2
+        done
+        echo "mongo RS init timeout" >&2; exit 1
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?set in .env}
+
+  minio:
+    image: minio/minio:RELEASE.2024-06-13T22-53-53Z
+    profiles: ["core"]
+    container_name: banking_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:?set in .env}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-06-13T22-53-53Z
+    profiles: ["core"]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        mc alias set local $${S3_ENDPOINT:-http://minio:9000} $${AWS_ACCESS_KEY_ID} $${AWS_SECRET_ACCESS_KEY}
+        mc mb --ignore-existing local/$${S3_BUCKET:-banking-lakehouse}
+        # warehouse prefixes per Architecture 6.2
+        echo "bucket $${S3_BUCKET:-banking-lakehouse} ready at $${S3_ENDPOINT:-http://minio:9000}"
+    environment:
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_BUCKET: ${S3_BUCKET:-banking-lakehouse}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?set in .env}
+
+volumes:
+  pgdata:
+  mongodata:
+  miniodata:

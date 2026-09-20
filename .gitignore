@@ -1,10 +1,69 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
+build/
+dist/
+wheels/
+*.egg-info
 .venv/
+pip-log.txt
+
+# Secrets — never committed (Architecture 14.1, PROJECT_PLAN Phase 0)
 .env
-# Spark
+
+# Logs — stage scoped logs (ingest, bronze_dq, silver, gold, publish)
+logs/
+*.log
+
+# Target / caches
+target/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+__pycache__/
+.qwen/
+
+# Local data — landing, checkpoints, warehouse, dq docs
+landing/
+.mnt/
 .spark/
 spark-warehouse/
-# OS
+checkpoints/
+dq_docs/
+data/
+
+# Terraform state (Architecture 15.3)
+terraform/envs/*/.terraform/
+terraform/envs/*/*.tfstate
+terraform/envs/*/*.tfstate.backup
+.terraform.lock.hcl
+*.tfvars
+!terraform/envs/*/terraform.tfvars.example
+
+# Object storage local data
+minio_data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
 .DS_Store
+Thumbs.db
+.ipynb_checkpoints/
+
+# GX uncommitted
+gx/uncommitted/
+
+# Reports / artifacts
+.reports/
+test-results/
+htmlcov/
+.coverage
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini

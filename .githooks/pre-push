@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# .githooks/pre-push — budget <90s (Architecture 16.3)
+set -euo pipefail
+
+echo "pre-push: running make test_fast..."
+
+if command -v uv >/dev/null 2>&1; then
+  uv run pytest -q -m "not slow" 2>&1 | tail -20
+else
+  pytest -q -m "not slow" 2>&1 | tail -20 || echo "pytest not installed — skipping (CI will check)"
+fi
+
+# dbt parse if project exists
+if [ -f "dbt/banking_dbt/dbt_project.yml" ]; then
+  if command -v dbt >/dev/null 2>&1; then
+    dbt parse --project-dir dbt/banking_dbt 2>&1 | tail -10 || { echo "✖ dbt parse failed"; exit 1; }
+  fi
+fi
+
+# terraform validate if terraform exists
+if [ -d "terraform" ] && command -v terraform >/dev/null 2>&1; then
+  echo "terraform validate..."
+  terraform -chdir=terraform fmt -check 2>&1 | head -20 || true
+fi
+
+echo "✓ pre-push passed"

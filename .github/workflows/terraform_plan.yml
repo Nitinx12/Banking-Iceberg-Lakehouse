@@ -1,0 +1,22 @@
+name: Terraform Plan
+on:
+  pull_request:
+    paths: ["terraform/**"]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+      - run: terraform fmt -check -recursive terraform/ 2>&1 | head -40
+      - run: |
+          for env in dev staging prod; do
+            if [ -d "terraform/envs/$env" ]; then
+              echo "=== validate $env ==="; terraform -chdir=terraform/envs/$env init -backend=false 2>&1 | tail -5; terraform -chdir=terraform/envs/$env validate 2>&1 | tail -10; fi
+          done

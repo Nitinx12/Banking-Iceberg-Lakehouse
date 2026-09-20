@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# .githooks/commit-msg — Conventional Commits (Architecture 16.3)
+set -euo pipefail
+msg_file="$1"
+msg=$(head -n1 "$msg_file")
+# Allow merge commits
+if echo "$msg" | grep -Eq '^Merge '; then exit 0; fi
+# Conventional Commits: type(scope)?: description
+if ! echo "$msg" | grep -Eq '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?: .+'; then
+  echo "✖ commit-msg must follow Conventional Commits: <type>(scope): <description>" >&2
+  echo "  e.g. feat(ingest): add watermark overlap window" >&2
+  echo "  types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert" >&2
+  exit 1
+fi

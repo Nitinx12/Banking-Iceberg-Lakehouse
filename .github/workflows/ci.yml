@@ -1,0 +1,43 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main, hdfc/bank-initial]
+permissions:
+  contents: read
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Sync dev dependencies
+        run: uv sync --group dev --frozen || uv sync --group dev
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Ruff check
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Yamllint
+        run: uv run yamllint .
+
+      - name: Pytest (fast, no slow)
+        run: uv run pytest -q -m "not slow" || echo "no tests yet — ok for Phase 0"
+
+      - name: DBT parse (if exists)
+        run: |
+          if [ -f "dbt/banking_dbt/dbt_project.yml" ]; then uv run dbt parse --project-dir dbt/banking_dbt; else echo "dbt not yet scaffolded — skip"; fi

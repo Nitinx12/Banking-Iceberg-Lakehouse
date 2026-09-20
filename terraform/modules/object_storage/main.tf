@@ -12,3 +12,15 @@ resource "aws_s3_bucket_versioning" "warehouse" {
   bucket = aws_s3_bucket.warehouse.id
   versioning_configuration { status = "Enabled" }
 }
+resource "aws_s3_bucket_lifecycle_configuration" "warehouse" {
+  bucket = aws_s3_bucket.warehouse.id
+  rule {
+    id     = "expire_noncurrent"
+    status = "Enabled"
+    noncurrent_version_expiration { noncurrent_days = 30 }
+  }
+}
+resource "aws_s3_bucket_server_side_encryption_configuration" "warehouse" {
+  bucket = aws_s3_bucket.warehouse.id
+  rule { apply_server_side_encryption_by_default { sse_algorithm = "AES256" } }
+}

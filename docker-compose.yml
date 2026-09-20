@@ -109,6 +109,84 @@ services:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?set in .env}
 
+  # --- orchestration profile: Airflow (Architecture 4.2) ---
+  airflow-apiserver:
+    image: apache/airflow:2.9.3-python3.11
+    profiles: ["orchestration"]
+    depends_on: [postgres]
+    environment:
+      AIRFLOW__CORE__EXECUTOR: ${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
+    ports: ["8080:8080"]
+    command: airflow api-server
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.3-python3.11
+    profiles: ["orchestration"]
+    depends_on: [postgres]
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
+    command: airflow scheduler
+
+  # --- streaming profile: Flink (stretch Phase 7) ---
+  flink-jobmanager:
+    image: flink:1.19.1-scala_2.12
+    profiles: ["streaming"]
+    command: jobmanager
+    ports: ["8081:8081"]
+    environment:
+      - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
+
+  flink-taskmanager:
+    image: flink:1.19.1-scala_2.12
+    profiles: ["streaming"]
+    depends_on: [flink-jobmanager]
+    command: taskmanager
+
+  # --- quality profile: GX Data Docs via nginx ---
+  gx-docs:
+    image: nginx:alpine
+    profiles: ["quality"]
+    ports: ["8082:80"]
+    volumes: ["./gx/uncommitted/data_docs:/usr/share/nginx/html:ro"]
+
+  # --- monitoring profile: Prometheus/Grafana/Alertmanager per Architecture 12 ---
+  prometheus:
+    image: prom/prometheus:v2.53.2
+    profiles: ["monitoring"]
+    ports: ["9090:9090"]
+    volumes: ["./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    profiles: ["monitoring"]
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    depends_on: [prometheus]
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    profiles: ["monitoring"]
+    ports: ["9093:9093"]
+    volumes: ["./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro"]
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    profiles: ["monitoring"]
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT:-5432}/${POSTGRES_WAREHOUSE_DB:-banking_dw}?sslmode=disable"
+
+  # --- dashboard profile: Streamlit ---
+  streamlit:
+    image: python:3.11-slim
+    profiles: ["dashboard"]
+    ports: ["8501:8501"]
+    volumes: ["./dashboard:/app/dashboard:ro"]
+    working_dir: /app
+    command: bash -c "pip install streamlit psycopg2-binary sqlalchemy pandas plotly && streamlit run dashboard/Home.py --server.port 8501"
+
 volumes:
   pgdata:
   mongodata:

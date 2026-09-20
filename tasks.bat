@@ -102,27 +102,43 @@ if %ERRORLEVEL%==0 ( uv run pytest -q -m "not slow" ) else ( pytest -q -m "not s
 goto :eof
 
 :ingest
-echo Phase 1: ingest_mongo_batch not yet implemented
+echo Bronze ingestion — requires compose core up (scripts\ps1\run_ingestion.ps1)
+where uv >nul 2>&1
+if %ERRORLEVEL%==0 ( uv run python -m jobs.ingestion.bronze --all ) else ( python -m jobs.ingestion.bronze --all )
 goto :eof
 
 :dbt_build
-echo Phase 2: dbt build not yet implemented
+echo dbt build (scripts\ps1\run_dbt.ps1)
+where uv >nul 2>&1
+if %ERRORLEVEL%==0 ( uv run dbt build --project-dir dbt\banking_dbt ) else ( dbt build --project-dir dbt\banking_dbt )
 goto :eof
 
 :dq
-echo Phase 3: GX checkpoints not yet implemented
+echo DQ checks + dbt test (scripts\ps1\run_dq.ps1)
+where uv >nul 2>&1
+if %ERRORLEVEL%==0 ( uv run python -m jobs.quality.checks ) else ( python -m jobs.quality.checks )
+where uv >nul 2>&1
+if %ERRORLEVEL%==0 ( uv run dbt test --project-dir dbt\banking_dbt ) else ( dbt test --project-dir dbt\banking_dbt )
 goto :eof
 
 :dashboard
-echo Phase 4: streamlit not yet implemented
+echo Streamlit dashboard on http://localhost:8501
+where uv >nul 2>&1
+if %ERRORLEVEL%==0 ( uv run streamlit run dashboard\Home.py ) else ( streamlit run dashboard\Home.py )
 goto :eof
 
 :tf_plan
-echo Phase 6: terraform plan ENV=%ARG2%
+set TFENV=%ARG2%
+if "%TFENV%"=="" set TFENV=dev
+terraform -chdir=terraform\envs\%TFENV% init -backend-config=backend.hcl -reconfigure -input=false
+terraform -chdir=terraform\envs\%TFENV% plan -input=false
 goto :eof
 
 :tf_apply
-echo Phase 6: terraform apply ENV=%ARG2%
+set TFENV=%ARG2%
+if "%TFENV%"=="" set TFENV=dev
+terraform -chdir=terraform\envs\%TFENV% init -backend-config=backend.hcl -reconfigure -input=false
+terraform -chdir=terraform\envs\%TFENV% apply -input=false
 goto :eof
 
 :seed_mongo
@@ -132,7 +148,10 @@ if %ERRORLEVEL%==0 ( uv run python scripts\seed_mongo.py ) else ( python scripts
 goto :eof
 
 :docs
-echo dbt docs + Data Docs — Phase 2/3
+echo dbt docs + Data Docs
+where uv >nul 2>&1
+if %ERRORLEVEL%==0 ( uv run dbt docs generate --project-dir dbt\banking_dbt --target-path docs_site ) else ( dbt docs generate --project-dir dbt\banking_dbt --target-path docs_site )
+echo dbt docs at dbt\banking_dbt\docs_site\index.html
 goto :eof
 
 :clean

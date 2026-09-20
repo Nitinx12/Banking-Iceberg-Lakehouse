@@ -80,6 +80,10 @@ markers = [
 [tool.yamllint]
 extends = "default"
 rules.line-length.max = 120
+ignore = ".venv/"
+rules.document-start.disable = true
+rules.truthy.allowed-values = ["true", "false", "on"]
+rules.braces.max-spaces-inside = 2
 
 [tool.sqlfluff]
 dialect = "postgres"

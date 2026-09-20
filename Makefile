@@ -5,6 +5,9 @@ UV ?= uv
 PY ?= $(UV) run python
 RUF ?= $(UV) run ruff
 
+ENV ?= dev
+DBT_SELECTOR ?= all
+
 .PHONY: help env setup hooks up down lint test test_fast ingest dbt_build dq dashboard tf_plan tf_apply seed_mongo docs clean
 
 help:
@@ -18,10 +21,10 @@ help:
 	@echo "  make lint              - ruff + yamllint + sqlfluff (if present)"
 	@echo "  make test              - pytest -q"
 	@echo "  make test_fast         - pytest -q -m 'not slow'"
-	@echo "  make ingest            - (Phase 1) batch ingestion locally"
-	@echo "  make dbt_build         - (Phase 2) dbt build"
-	@echo "  make dq                - (Phase 3) GX checkpoints"
-	@echo "  make dashboard         - (Phase 4) streamlit run"
+	@echo "  make ingest            - batch Bronze ingestion (scripts/sh/run_ingestion.sh)"
+	@echo "  make dbt_build         - dbt build (scripts/sh/run_dbt.sh $(DBT_SELECTOR))"
+	@echo "  make dq                - DQ checks + dbt test (scripts/sh/run_dq.sh)"
+	@echo "  make dashboard         - streamlit run dashboard/Home.py"
 	@echo "  make tf_plan ENV=dev   - terraform plan"
 	@echo "  make tf_apply ENV=dev  - terraform apply"
 	@echo "  make seed_mongo        - load sample dataset into local Mongo"
@@ -59,31 +62,33 @@ test:
 test_fast:
 	$(UV) run pytest -q -m "not slow" || pytest -q -m "not slow"
 
-# Phase stubs — implemented in later phases
 ingest:
-	@echo "Phase 1: ingest_mongo_batch not yet implemented — see PROJECT_PLAN.md Phase 1"
+	bash scripts/sh/run_ingestion.sh || $(PY) -m jobs.ingestion.bronze --all
 
 dbt_build:
-	@echo "Phase 2: dbt build not yet implemented"
+	bash scripts/sh/run_dbt.sh $(DBT_SELECTOR) || $(UV) run dbt build --project-dir dbt/banking_dbt --select $(DBT_SELECTOR)
 
 dq:
-	@echo "Phase 3: GX checkpoints not yet implemented"
+	bash scripts/sh/run_dq.sh || $(PY) -m jobs.quality.checks
 
 dashboard:
-	@echo "Phase 4: streamlit not yet implemented"
+	$(UV) run streamlit run dashboard/Home.py || streamlit run dashboard/Home.py
 
 tf_plan:
-	@echo "Phase 6: terraform plan ENV=$(or $(ENV),dev)"
+	terraform -chdir=terraform/envs/$(ENV) init -backend-config=backend.hcl -reconfigure -input=false
+	terraform -chdir=terraform/envs/$(ENV) plan -input=false
 
 tf_apply:
-	@echo "Phase 6: terraform apply ENV=$(or $(ENV),dev)"
+	terraform -chdir=terraform/envs/$(ENV) init -backend-config=backend.hcl -reconfigure -input=false
+	terraform -chdir=terraform/envs/$(ENV) apply -input=false
 
 seed_mongo:
 	@echo "Seeding Mongo — requires compose core up and dataset in data/ or contracts/"
 	$(PY) scripts/seed_mongo.py || echo "seed_mongo.py not yet implemented (Phase 0 task)"
 
 docs:
-	@echo "dbt docs generate + GX Data Docs — Phase 2/3"
+	$(UV) run dbt docs generate --project-dir dbt/banking_dbt --target-path docs_site || dbt docs generate --project-dir dbt/banking_dbt --target-path docs_site
+	@echo "dbt docs at dbt/banking_dbt/docs_site/index.html; GX Data Docs via make dq"
 
 clean:
 	rm -rf .pytest_cache .ruff_cache __pycache__ jobs/__pycache__ tests/__pycache__ .spark spark-warehouse logs/*.log 2>/dev/null || true

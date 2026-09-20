@@ -49,11 +49,26 @@ def main():
     if data_dir.exists():
         json_files = list(data_dir.glob("*.json"))
         if json_files:
+            from bson import ObjectId
+            from dateutil import parser as date_parser
+
+            def convert_extended(v):
+                if isinstance(v, dict):
+                    if set(v.keys()) == {"$oid"}:
+                        return ObjectId(v["$oid"])
+                    if set(v.keys()) == {"$date"}:
+                        return date_parser.parse(v["$date"])
+                    return {k: convert_extended(x) for k, x in v.items()}
+                if isinstance(v, list):
+                    return [convert_extended(x) for x in v]
+                return v
+
             for jf in json_files:
                 coll = jf.stem
                 docs = json.loads(jf.read_text())
                 if isinstance(docs, dict):
                     docs = [docs]
+                docs = [convert_extended(d) for d in docs]
                 if docs:
                     db[coll].delete_many({})
                     db[coll].insert_many(docs)

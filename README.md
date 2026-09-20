@@ -38,10 +38,10 @@ banking_data_platform/
 ├── .github/workflows/   ci.yml, terraform_plan.yml
 ├── .githooks/           pre-commit, commit-msg, pre-push
 ├── airflow/dags/        daily_banking_pipeline etc. (Phase 1+)
-├── spark_jobs/          ingestion/transform/quality/publish/maintenance + common/
+├── jobs/                ingestion/transform/quality/publish/maintenance + common/
 ├── contracts/           one YAML per collection (Phase 0 task)
 ├── dbt/banking_dbt/     staging/silver/gold + snapshots (Phase 2)
-├── great_expectations/  suites/checkpoints (Phase 3)
+├── gx/                  suites/checkpoints (Phase 3)
 ├── flink/sql/           CDC + windows (Phase 7)
 ├── streamlit_app/       pages/ (Phase 4)
 ├── terraform/           modules + envs/dev|staging|prod (Phase 6)

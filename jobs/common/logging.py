@@ -1,4 +1,4 @@
-"""spark_jobs/common/logging.py — stage-scoped structured logging (Architecture 12.1)."""
+"""jobs/common/logging.py — stage-scoped structured logging (Architecture 12.1)."""
 
 import logging
 import os

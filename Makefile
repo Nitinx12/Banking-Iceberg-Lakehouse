@@ -86,5 +86,5 @@ docs:
 	@echo "dbt docs generate + GX Data Docs — Phase 2/3"
 
 clean:
-	rm -rf .pytest_cache .ruff_cache __pycache__ spark_jobs/__pycache__ tests/__pycache__ .spark spark-warehouse logs/*.log 2>/dev/null || true
+	rm -rf .pytest_cache .ruff_cache __pycache__ jobs/__pycache__ tests/__pycache__ .spark spark-warehouse logs/*.log 2>/dev/null || true
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true

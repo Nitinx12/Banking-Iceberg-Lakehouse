@@ -1,0 +1,43 @@
+name: banking_dbt
+version: "1.0"
+config-version: 2
+profile: banking_dbt
+# CE path: local Spark/Databricks with Delta for Silver/Gold (ADR 003). Bronze stays Iceberg (jdbc banking).
+# Swap `type: databricks` to local `type: postgres` or `duckdb` for pure local dev if needed.
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+snapshot-paths: ["snapshots"]
+macro-paths: ["macros"]
+
+require-dbt-version: ">=1.8.0"
+
+models:
+  banking_dbt:
+    staging:
+      +materialized: view
+      +schema: staging
+    silver:
+      +materialized: incremental
+      +incremental_strategy: merge
+      +schema: silver
+    gold:
+      +materialized: incremental
+      +incremental_strategy: merge
+      +schema: gold
+      +contract:
+          enforced: true
+
+seeds:
+  banking_dbt:
+    +schema: silver
+    +column_types:
+        code: varchar(10)
+
+snapshots:
+  banking_dbt:
+    +target_schema: silver
+    +strategy: check
+    +check_cols: all
+    +invalidate_hard_deletes: true

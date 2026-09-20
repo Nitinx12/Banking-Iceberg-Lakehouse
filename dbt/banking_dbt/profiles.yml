@@ -1,0 +1,22 @@
+# dbt profiles — env-driven (Architecture 7.2). Use: dbt build --profiles-dir dbt/banking_dbt
+# For local dev without Databricks, set DATABRICKS_HOST empty and use postgres profile via --target dev_local
+
+banking_dbt:
+  target: dev
+  outputs:
+    dev:
+      type: databricks
+      host: "{{ env_var('DATABRICKS_HOST', '') }}"
+      http_path: "{{ env_var('DATABRICKS_HTTP_PATH', '') }}"
+      token: "{{ env_var('DATABRICKS_TOKEN', '') }}"
+      catalog: "{{ env_var('ICEBERG_CATALOG_NAME', 'banking') }}"
+      schema: silver
+      threads: 4
+    dev_local:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST', 'postgres') }}"
+      user: "{{ env_var('POSTGRES_USER', 'postgres') }}"
+      pass: "{{ env_var('POSTGRES_PASSWORD', '') }}"
+      dbname: "{{ env_var('POSTGRES_WAREHOUSE_DB', 'banking_dw') }}"
+      schema: silver
+      threads: 4

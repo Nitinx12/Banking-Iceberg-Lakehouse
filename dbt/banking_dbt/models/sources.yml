@@ -1,0 +1,35 @@
+version: 2
+
+sources:
+  - name: bronze
+    database: "{{ env_var('ICEBERG_CATALOG_NAME', 'banking') }}"
+    schema: bronze
+    tables:
+      - name: customers
+        loaded_at_field: _ingested_at
+        freshness:
+          warn_after: { count: 25, period: hour }
+          error_after: { count: 26, period: hour }
+        columns:
+          - name: _id
+            tests: [not_null]
+      - name: accounts
+        loaded_at_field: _ingested_at
+        freshness: { warn_after: { count: 25, period: hour }, error_after: { count: 26, period: hour } }
+      - name: transactions
+        loaded_at_field: _ingested_at
+        freshness: { warn_after: { count: 25, period: hour }, error_after: { count: 26, period: hour } }
+      - name: branches
+        loaded_at_field: _ingested_at
+      - name: loans
+        loaded_at_field: _ingested_at
+      - name: cards
+        loaded_at_field: _ingested_at
+      - name: card_transactions
+        loaded_at_field: _ingested_at
+      - name: loan_payments
+        loaded_at_field: _ingested_at
+      - name: support_tickets
+        loaded_at_field: _ingested_at
+      - name: employees
+        loaded_at_field: _ingested_at

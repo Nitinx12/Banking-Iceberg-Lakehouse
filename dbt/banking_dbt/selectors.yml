@@ -1,0 +1,7 @@
+selectors:
+  - name: silver
+    definition: "tag:silver or path:models/silver"
+  - name: gold
+    definition: "tag:gold or path:models/gold"
+  - name: critical
+    definition: "config.severity: error"

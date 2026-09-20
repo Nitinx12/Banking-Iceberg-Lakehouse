@@ -2,17 +2,17 @@
 # Branch: hdfc/bank-initial | Location: C:\Git-Repo\streamflix-lakehouse
 # Docker Desktop must be running for core profile (postgres/mongo/minio)
 
-# 0. env + deps + hooks (once)
-tasks.bat setup
-tasks.bat hooks
+# 0. env + deps + hooks (once) — PowerShell needs .\ prefix
+.\tasks.bat setup
+.\tasks.bat hooks
 
 # 1. start core (postgres banking_dw/iceberg_catalog + mongo rs0 + minio)
-tasks.bat up core
+.\tasks.bat up core
 docker compose ps
 
 # 2. quick checks
-tasks.bat test
-tasks.bat lint
+.\tasks.bat test
+.\tasks.bat lint
 
 # 3. Bronze dry-run vs Mongo (no write, verified 60k/95k/2M/3M before)
 #    uses local Mongo banking when Docker mongo not yet seeded

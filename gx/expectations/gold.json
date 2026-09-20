@@ -1,0 +1,11 @@
+{
+  "expectation_suite_name": "gold",
+  "expectations": [
+    { "expectation_type": "expect_column_values_to_not_be_null", "kwargs": { "column": "customer_sk" } },
+    { "expectation_type": "expect_column_values_to_be_unique", "kwargs": { "column": "customer_sk" } },
+    { "expectation_type": "expect_column_values_to_not_be_null", "kwargs": { "column": "transaction_id" } },
+    { "expectation_type": "expect_column_values_to_be_unique", "kwargs": { "column": "transaction_id" } },
+    { "expectation_type": "expect_column_values_to_be_between", "kwargs": { "column": "amount", "min_value": 0.01, "max_value": 1000000 } },
+    { "expectation_type": "expect_column_pair_values_A_to_be_greater_than_B", "kwargs": { "column_A": "valid_to", "column_B": "valid_from", "or_equal": true } }
+  ]
+}

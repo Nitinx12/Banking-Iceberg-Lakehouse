@@ -2,8 +2,14 @@
   "expectation_suite_name": "bronze",
   "expectations": [
     { "expectation_type": "expect_column_values_to_not_be_null", "kwargs": { "column": "_id" } },
+    { "expectation_type": "expect_column_values_to_not_be_null", "kwargs": { "column": "_doc" } },
+    { "expectation_type": "expect_column_values_to_not_be_null", "kwargs": { "column": "_source_ts" } },
+    { "expectation_type": "expect_column_values_to_not_be_null", "kwargs": { "column": "_ingested_at" } },
     { "expectation_type": "expect_column_values_to_not_be_null", "kwargs": { "column": "_batch_id" } },
+    { "expectation_type": "expect_column_values_to_not_be_null", "kwargs": { "column": "_source_collection" } },
     { "expectation_type": "expect_compound_columns_to_be_unique", "kwargs": { "column_list": ["_id", "_batch_id"] } },
-    { "expectation_type": "expect_table_row_count_to_be_between", "kwargs": { "min_value": 1 } }
+    { "expectation_type": "expect_table_row_count_to_be_between", "kwargs": { "min_value": 1, "max_value": 10000000 } },
+    { "expectation_type": "expect_column_pair_values_A_to_be_greater_than_B", "kwargs": { "column_A": "_ingested_at", "column_B": "_source_ts", "or_equal": true } },
+    { "expectation_type": "expect_column_values_to_be_between", "kwargs": { "column": "_ingested_at", "min_value": null, "max_value": null } }
   ]
 }

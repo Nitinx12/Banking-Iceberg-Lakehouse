@@ -1,0 +1,9 @@
+{
+  "expectation_suite_name": "bronze",
+  "expectations": [
+    { "expectation_type": "expect_column_values_to_not_be_null", "kwargs": { "column": "_id" } },
+    { "expectation_type": "expect_column_values_to_not_be_null", "kwargs": { "column": "_batch_id" } },
+    { "expectation_type": "expect_compound_columns_to_be_unique", "kwargs": { "column_list": ["_id", "_batch_id"] } },
+    { "expectation_type": "expect_table_row_count_to_be_between", "kwargs": { "min_value": 1 } }
+  ]
+}

@@ -27,12 +27,28 @@ def run(batch_id: str = None):
     )
     from pyspark.sql.window import Window
 
-    w = Window.partitionBy("payment_id").orderBy(F.col("_source_ts").desc())
+    w = Window.partitionBy("payment_id").orderBy(F.col("_source_ts").desc(), F.col("_id").desc())
     deduped = parsed.withColumn("rn", F.row_number().over(w)).filter(F.col("rn") == 1).drop("rn")
+    # audit cols per 7.3
+    deduped = (
+        deduped.withColumn("silver_loaded_at", F.current_timestamp())
+        .withColumn("_bronze_batch_id", F.col("_batch_id"))
+        .withColumn("_bronze_doc_hash", F.col("_doc_hash"))
+    )
     quarantine = deduped.filter(F.col("payment_id").isNull() | (F.col("amount_paid") <= 0))
     clean = deduped.filter(F.col("payment_id").isNotNull() & (F.col("amount_paid") > 0))
-    clean.write.mode("append").saveAsTable("banking.silver.loan_payments")
-    if quarantine.count() > 0:
+    clean.createOrReplaceTempView("clean_loan_payments")
+    spark.sql("CREATE NAMESPACE IF NOT EXISTS banking.silver")
+    # ensure table exists (schema from clean)
+    if not spark.catalog.tableExists("banking.silver.loan_payments"):
+        clean.limit(0).write.mode("append").saveAsTable("banking.silver.loan_payments")
+    spark.sql("""
+        MERGE INTO banking.silver.loan_payments t USING clean_loan_payments s
+        ON t.payment_id = s.payment_id
+        WHEN MATCHED THEN UPDATE SET *
+        WHEN NOT MATCHED THEN INSERT *
+    """)
+    if quarantine.count() > 0:  # single count
         quarantine.withColumn("_dq_rule", F.lit("amount")).write.mode("append").saveAsTable(
             "banking.quarantine.loan_payments"
         )

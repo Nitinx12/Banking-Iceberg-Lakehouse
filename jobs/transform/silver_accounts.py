@@ -38,12 +38,28 @@ def run(batch_id: str = None):
     )
     from pyspark.sql.window import Window
 
-    w = Window.partitionBy("account_id").orderBy(F.col("_source_ts").desc())
+    w = Window.partitionBy("account_id").orderBy(F.col("_source_ts").desc(), F.col("_id").desc())
     deduped = parsed.withColumn("rn", F.row_number().over(w)).filter(F.col("rn") == 1).drop("rn")
+    # audit cols per 7.3
+    deduped = (
+        deduped.withColumn("silver_loaded_at", F.current_timestamp())
+        .withColumn("_bronze_batch_id", F.col("_batch_id"))
+        .withColumn("_bronze_doc_hash", F.col("_doc_hash"))
+    )
     quarantine = deduped.filter(F.col("account_id").isNull() | F.col("balance").isNull())
     clean = deduped.filter(F.col("account_id").isNotNull() & F.col("balance").isNotNull())
-    clean.write.mode("append").saveAsTable("banking.silver.accounts")
-    if quarantine.count() > 0:
+    clean.createOrReplaceTempView("clean_accounts")
+    spark.sql("CREATE NAMESPACE IF NOT EXISTS banking.silver")
+    # ensure table exists (schema from clean)
+    if not spark.catalog.tableExists("banking.silver.accounts"):
+        clean.limit(0).write.mode("append").saveAsTable("banking.silver.accounts")
+    spark.sql("""
+        MERGE INTO banking.silver.accounts t USING clean_accounts s
+        ON t.account_id = s.account_id
+        WHEN MATCHED THEN UPDATE SET *
+        WHEN NOT MATCHED THEN INSERT *
+    """)
+    if quarantine.count() > 0:  # single count
         quarantine.withColumn("_dq_rule", F.lit("not_null")).write.mode("append").saveAsTable(
             "banking.quarantine.accounts"
         )

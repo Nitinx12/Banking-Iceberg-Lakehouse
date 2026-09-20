@@ -30,13 +30,19 @@ def run(batch_id: str = None):
     # full refresh: dedup by branch_id
     from pyspark.sql.window import Window
 
-    w = Window.partitionBy("branch_id").orderBy(F.col("_source_ts").desc())
+    w = Window.partitionBy("branch_id").orderBy(F.col("_source_ts").desc(), F.col("_id").desc())
     deduped = parsed.withColumn("rn", F.row_number().over(w)).filter(F.col("rn") == 1).drop("rn")
+    # audit cols per 7.3
+    deduped = (
+        deduped.withColumn("silver_loaded_at", F.current_timestamp())
+        .withColumn("_bronze_batch_id", F.col("_batch_id"))
+        .withColumn("_bronze_doc_hash", F.col("_doc_hash"))
+    )
     quarantine = deduped.filter(F.col("branch_id").isNull())
     clean = deduped.filter(F.col("branch_id").isNotNull())
     # overwrite for full refresh
     clean.write.mode("overwrite").saveAsTable("banking.silver.branches")
-    if quarantine.count() > 0:
+    if quarantine.count() > 0:  # single count
         quarantine.withColumn("_dq_rule", F.lit("not_null")).write.mode("append").saveAsTable(
             "banking.quarantine.branches"
         )

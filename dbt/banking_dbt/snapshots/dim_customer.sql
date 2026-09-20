@@ -1,4 +1,4 @@
-{% snapshot dim_customer %}
+{% snapshot dim_customer_snapshot %}
 {{
   config(
     target_schema='silver',

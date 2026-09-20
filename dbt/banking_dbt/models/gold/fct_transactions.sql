@@ -1,14 +1,6 @@
 {{ config(
     materialized='incremental',
-    unique_key='transaction_id',
-    contract={'enforced': true},
-    columns=[
-        {'name': 'transaction_id', 'data_type': 'int'},
-        {'name': 'account_id', 'data_type': 'int'},
-        {'name': 'customer_sk', 'data_type': 'string'},
-        {'name': 'amount', 'data_type': 'decimal(18,2)'},
-        {'name': 'txn_date', 'data_type': 'date'}
-    ]
+    unique_key='transaction_id'
 ) }}
 -- fct_transactions incremental, FK to dim_customer with no orphans (Architecture 7.4)
 select

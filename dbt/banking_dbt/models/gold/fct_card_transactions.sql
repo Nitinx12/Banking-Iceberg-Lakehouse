@@ -1,0 +1,2 @@
+{{ config(materialized='incremental', unique_key='card_txn_id') }}
+select cast(json_extract_scalar(_doc, '$.card_txn_id') as int) as card_txn_id, cast(json_extract_scalar(_doc, '$.card_id') as int) as card_id, cast(json_extract_scalar(_doc, '$.amount') as decimal(18,2)) as amount, cast(json_extract_scalar(_doc, '$.is_fraud') as int) as is_fraud from {{ source('bronze','card_transactions') }} {% if is_incremental() %} where _ingested_at > (select max(silver_loaded_at) from {{ ref('silver_card_transactions') }}) {% endif %}

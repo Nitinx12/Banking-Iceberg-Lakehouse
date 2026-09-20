@@ -1,0 +1,29 @@
+[{
+	"_id": {
+		"$oid": "6a6ae8f1ac477a65721c1212"
+	},
+	"branch_id": 1,
+	"branch_name": "Pune Branch 1",
+	"city": "Pune",
+	"state": "Maharashtra",
+	"opened_date": "2016-05-23",
+	"ifsc_code": "BNK0000000",
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "6a6ae8f1ac477a65721c1213"
+	},
+	"branch_id": 3,
+	"branch_name": "Lucknow Branch 3",
+	"city": "Lucknow",
+	"state": "Uttar Pradesh",
+	"opened_date": "2017-12-10",
+	"ifsc_code": "BNK0000002",
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+}]
+

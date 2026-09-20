@@ -1,0 +1,36 @@
+collection: branches
+business_key: branch_id
+watermark_field: none
+schema_version: "1.0"
+mode: full_refresh
+count_expected: 150
+fields:
+  - name: _id
+    type: string
+    required: true
+  - name: branch_id
+    type: int
+    required: true
+  - name: branch_name
+    type: string
+    required: true
+  - name: city
+    type: string
+    required: false
+  - name: state
+    type: string
+    required: false
+  - name: opened_date
+    type: date
+    required: false
+  - name: ifsc_code
+    type: string
+    required: false
+  - name: created_at
+    type: timestamp
+    required: true
+
+drift_policy:
+  new_field: warn
+  removed_required_field: fail
+  type_change: fail

@@ -1,0 +1,42 @@
+collection: cards
+business_key: card_id
+watermark_field: created_at
+schema_version: "1.0"
+mode: incremental
+count_expected: 65000
+fields:
+  - name: _id
+    type: string
+    required: true
+  - name: card_id
+    type: int
+    required: true
+  - name: customer_id
+    type: int
+    required: true
+  - name: account_id
+    type: int
+    required: true
+  - name: card_type
+    type: string
+    required: true
+  - name: issue_date
+    type: date
+    required: true
+  - name: expiry_date
+    type: date
+    required: false
+  - name: credit_limit
+    type: long
+    required: false
+  - name: status
+    type: string
+    required: true
+  - name: created_at
+    type: timestamp
+    required: true
+
+drift_policy:
+  new_field: warn
+  removed_required_field: fail
+  type_change: fail

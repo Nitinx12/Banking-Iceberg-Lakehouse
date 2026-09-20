@@ -1,0 +1,36 @@
+collection: employees
+business_key: employee_id
+watermark_field: created_at
+schema_version: "1.0"
+mode: incremental
+count_expected: 1800
+fields:
+  - name: _id
+    type: string
+    required: true
+  - name: employee_id
+    type: int
+    required: true
+  - name: name
+    type: string
+    required: true
+  - name: branch_id
+    type: int
+    required: true
+  - name: role
+    type: string
+    required: true
+  - name: hire_date
+    type: date
+    required: true
+  - name: salary
+    type: long
+    required: true
+  - name: created_at
+    type: timestamp
+    required: true
+
+drift_policy:
+  new_field: warn
+  removed_required_field: fail
+  type_change: fail

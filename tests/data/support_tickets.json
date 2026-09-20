@@ -1,0 +1,31 @@
+[{
+	"_id": {
+		"$oid": "6a6ae91191f5334579660dad"
+	},
+	"ticket_id": 1,
+	"customer_id": 16045,
+	"issue_type": "App Login Issue",
+	"date_opened": "2024-08-04",
+	"date_resolved": "2024-08-19",
+	"status": "Resolved",
+	"satisfaction_score": 5,
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "6a6ae91191f5334579660dae"
+	},
+	"ticket_id": 3,
+	"customer_id": 47568,
+	"issue_type": "Card Blocked",
+	"date_opened": "2021-06-23",
+	"date_resolved": "2021-07-08",
+	"status": "Resolved",
+	"satisfaction_score": 3,
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+}]
+

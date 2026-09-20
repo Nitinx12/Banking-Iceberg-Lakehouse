@@ -1,0 +1,29 @@
+[{
+	"_id": {
+		"$oid": "6a6ae90b0c5dc94e1f59d6ed"
+	},
+	"employee_id": 2,
+	"name": "Robert Rodriguez",
+	"branch_id": 136,
+	"role": "Relationship Manager",
+	"hire_date": "2010-08-04",
+	"salary": 50855,
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "6a6ae90b0c5dc94e1f59d6ee"
+	},
+	"employee_id": 3,
+	"name": "Arjun Rodriguez",
+	"branch_id": 35,
+	"role": "Customer Service",
+	"hire_date": "2020-02-12",
+	"salary": 94948,
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+}]
+

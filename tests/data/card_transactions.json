@@ -1,0 +1,29 @@
+[{
+	"_id": {
+		"$oid": "6a6ae8f2cdb29536379f2df4"
+	},
+	"card_txn_id": 1,
+	"card_id": 52505,
+	"txn_date": "2025-01-28",
+	"merchant_category": "Education",
+	"amount": 2162.41,
+	"is_fraud": 0,
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "6a6ae8f2cdb29536379f2df5"
+	},
+	"card_txn_id": 2,
+	"card_id": 12716,
+	"txn_date": "2022-08-26",
+	"merchant_category": "Education",
+	"amount": 2236.55,
+	"is_fraud": 0,
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+}]
+

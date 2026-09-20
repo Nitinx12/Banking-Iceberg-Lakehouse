@@ -1,0 +1,33 @@
+[{
+	"_id": {
+		"$oid": "6a6ae8f1866d6df4bb5e6348"
+	},
+	"card_id": 1,
+	"customer_id": 34846,
+	"account_id": 75950,
+	"card_type": "Credit - Gold",
+	"issue_date": "2018-12-05",
+	"expiry_date": "2023-12-04",
+	"credit_limit": 0,
+	"status": "Active",
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "6a6ae8f1866d6df4bb5e6349"
+	},
+	"card_id": 2,
+	"customer_id": 50151,
+	"account_id": 55880,
+	"card_type": "Credit - Classic",
+	"issue_date": "2016-05-19",
+	"expiry_date": "2021-05-18",
+	"credit_limit": 0,
+	"status": "Active",
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+}]
+

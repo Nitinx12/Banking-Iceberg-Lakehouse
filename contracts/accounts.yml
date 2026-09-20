@@ -1,0 +1,39 @@
+collection: accounts
+business_key: account_id
+watermark_field: created_at
+schema_version: "1.0"
+mode: incremental
+count_expected: 95000
+fields:
+  - name: _id
+    type: string
+    required: true
+  - name: account_id
+    type: int
+    required: true
+  - name: customer_id
+    type: int
+    required: true
+  - name: branch_id
+    type: int
+    required: true
+  - name: account_type
+    type: string
+    required: true
+  - name: balance
+    type: decimal(18,2)
+    required: true
+  - name: open_date
+    type: date
+    required: true
+  - name: status
+    type: string
+    required: true
+  - name: created_at
+    type: timestamp
+    required: true
+
+drift_policy:
+  new_field: warn
+  removed_required_field: fail
+  type_change: fail

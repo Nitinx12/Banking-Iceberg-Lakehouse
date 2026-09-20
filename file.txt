@@ -3,27 +3,24 @@ Branch: hdfc/bank-initial | Docs: Architecture.md + PROJECT_PLAN.md Phase 0-1
 Fill this file (or drop files) and I will scaffold next phases.
 
 ================================================================
-1. SAMPLE DOCUMENTS — 1 JSON doc per actual Mongo collection
-   Paste 1 example document per collection OR drop JSON files in tests/data/
-   Collections expected (Architecture 5.1): customers, accounts, transactions, branches, loans, cards
-   If your collections are named differently, list actual names here.
-
-   customers:    { paste 1 doc here or say file path }
-   accounts:     { }
-   transactions: { }
-   branches:     { }
-   loans:        { }
-   cards:        { }
-   other:        { list any extra collections }
-
-   Also drop: tests/data/*.json  or  data/mongodump/  or connection string to existing Mongo
+1. SAMPLE DOCUMENTS — PROVIDED ✓ (2026-09-20, tests/data/*.json + mongo banking)
+   Actual collections (10): customers, accounts, transactions, branches, loans, cards, card_transactions, loan_payments, support_tickets, employees
+   accounts:    95,000 rows (sample in tests/data/accounts.json)
+   customers:   60,000 rows (sample in tests/data/customers.json)
+   transactions: 2,000,000 rows (sample in tests/data/transactions.json)
+   branches:    150 rows (sample in tests/data/branches.json)
+   loans:       22,000 rows (sample in tests/data/loans.json)
+   cards:       65,000 rows (sample in tests/data/cards.json)
+   card_transactions: 3,000,000 rows (sample in tests/data/card_transactions.json) — LARGEST
+   loan_payments: 600,000 rows (sample in tests/data/loan_payments.json)
+   support_tickets: 25,000 rows (sample in tests/data/support_tickets.json)
+   employees:   1,800 rows (sample in tests/data/employees.json)
+   Source: mongosh banking --eval db.getCollectionNames() + countDocuments()
 ----------------------------------------------------------------
-2. VOLUME & GROWTH (Architecture 21.1)
-   Approx rows per collection today and monthly growth:
-   customers:    __ rows, +__ /month
-   accounts:     __
-   transactions: __
-   etc.
+2. VOLUME & GROWTH (Architecture 21.1) — PROFILED
+   See docs/profiling.md for full field inventory, null rates, watermark choices.
+   All collections: business keys unique (dups=0), created_at present 100% (no nulls), no updated_at field.
+   Watermarks: all incremental on created_at (+_id tiebreaker for 2M/3M), branches=full refresh. Overlap 10m.
 
 ----------------------------------------------------------------
 3. DATABRICKS WORKSPACE TIER (ADR 3 — Architecture 6.1)

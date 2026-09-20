@@ -1,0 +1,31 @@
+[{
+	"_id": {
+		"$oid": "6a6ae90cb2f0c23be127959b"
+	},
+	"payment_id": 1,
+	"loan_id": 21070,
+	"payment_date": "2020-05-06",
+	"amount_paid": 8144.05,
+	"principal_component": 5930.89,
+	"interest_component": 2213.16,
+	"late_payment_flag": 0,
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "6a6ae90cb2f0c23be127959c"
+	},
+	"payment_id": 2,
+	"loan_id": 17959,
+	"payment_date": "2011-09-23",
+	"amount_paid": 6128.01,
+	"principal_component": 4406.78,
+	"interest_component": 1721.23,
+	"late_payment_flag": 0,
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+}]
+

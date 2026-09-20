@@ -1,0 +1,31 @@
+[{
+	"_id": {
+		"$oid": "6a6ae8f0a8258cc8b4511369"
+	},
+	"account_id": 1,
+	"customer_id": 11749,
+	"branch_id": 141,
+	"account_type": "Current",
+	"balance": 95902.0,
+	"open_date": "2019-10-20",
+	"status": "Active",
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "6a6ae8f0a8258cc8b451136a"
+	},
+	"account_id": 2,
+	"customer_id": 47716,
+	"branch_id": 43,
+	"account_type": "Current",
+	"balance": 13261.61,
+	"open_date": "2026-02-03",
+	"status": "Active",
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+}]
+

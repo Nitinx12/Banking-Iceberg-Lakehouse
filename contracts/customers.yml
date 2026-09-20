@@ -1,0 +1,60 @@
+collection: customers
+business_key: customer_id
+watermark_field: created_at
+schema_version: "1.0"
+mode: incremental
+count_expected: 60000
+fields:
+  - name: _id
+    type: string
+    required: true
+  - name: customer_id
+    type: int
+    required: true
+  - name: name
+    type: string
+    required: true
+    pii: true
+    class: confidential
+  - name: gender
+    type: string
+    required: false
+  - name: date_of_birth
+    type: date
+    required: false
+  - name: city
+    type: string
+    required: false
+  - name: state
+    type: string
+    required: false
+  - name: phone
+    type: long
+    required: false
+    pii: true
+    class: confidential
+  - name: email
+    type: string
+    required: false
+    pii: true
+    class: confidential
+  - name: occupation
+    type: string
+    required: false
+  - name: annual_income
+    type: long
+    required: false
+  - name: join_date
+    type: date
+    required: false
+  - name: credit_score
+    type: int
+    required: false
+  - name: created_at
+    type: timestamp
+    required: true
+
+drift_policy:
+  new_field: warn
+  removed_required_field: fail
+  type_change: fail

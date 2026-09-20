@@ -1,0 +1,39 @@
+collection: transactions
+business_key: transaction_id
+watermark_field: created_at
+schema_version: "1.0"
+mode: incremental
+count_expected: 2000000
+fields:
+  - name: _id
+    type: string
+    required: true
+  - name: transaction_id
+    type: int
+    required: true
+  - name: account_id
+    type: int
+    required: true
+  - name: txn_date
+    type: date
+    required: true
+  - name: txn_type
+    type: string
+    required: true
+  - name: amount
+    type: decimal(18,2)
+    required: true
+  - name: channel
+    type: string
+    required: false
+  - name: merchant_category
+    type: string
+    required: false
+  - name: created_at
+    type: timestamp
+    required: true
+
+drift_policy:
+  new_field: warn
+  removed_required_field: fail
+  type_change: fail

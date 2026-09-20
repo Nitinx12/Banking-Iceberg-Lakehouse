@@ -1,0 +1,31 @@
+[{
+	"_id": {
+		"$oid": "6a6ae911e537b311d7729c5d"
+	},
+	"transaction_id": 1,
+	"account_id": 42369,
+	"txn_date": "2018-03-13",
+	"txn_type": "Deposit",
+	"amount": 1817.91,
+	"channel": "Online Banking",
+	"merchant_category": "Salary Credit",
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "6a6ae911e537b311d7729c5e"
+	},
+	"transaction_id": 2,
+	"account_id": 53934,
+	"txn_date": "2022-03-05",
+	"txn_type": "Withdrawal",
+	"amount": 12855.96,
+	"channel": "Mobile App",
+	"merchant_category": "ATM Withdrawal",
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+}]
+

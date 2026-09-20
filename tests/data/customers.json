@@ -1,0 +1,41 @@
+[{
+	"_id": {
+		"$oid": "6a6ae90af5284c6952a370a7"
+	},
+	"customer_id": 2,
+	"name": "Anjali Kapoor",
+	"gender": "Female",
+	"date_of_birth": "1965-12-18",
+	"city": "Lucknow",
+	"state": "Uttar Pradesh",
+	"phone": 9599825073,
+	"email": "customer1@mailbank.com",
+	"occupation": "Salaried - Government",
+	"annual_income": 1865003,
+	"join_date": "2020-11-08",
+	"credit_score": 672,
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+},
+{
+	"_id": {
+		"$oid": "6a6ae90af5284c6952a370a8"
+	},
+	"customer_id": 1,
+	"name": "Pooja Garcia",
+	"gender": "Male",
+	"date_of_birth": "1987-12-11",
+	"city": "Ahmedabad",
+	"state": "Gujarat",
+	"phone": 9562078082,
+	"email": "customer0@mailbank.com",
+	"occupation": "Retired",
+	"annual_income": 200025,
+	"join_date": "2018-02-23",
+	"credit_score": 690,
+	"created_at": {
+		"$date": "2026-07-30T06:54:07.68Z"
+	}
+}]
+

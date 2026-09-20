@@ -1,0 +1,36 @@
+collection: card_transactions
+business_key: card_txn_id
+watermark_field: created_at
+schema_version: "1.0"
+mode: incremental
+count_expected: 3000000
+fields:
+  - name: _id
+    type: string
+    required: true
+  - name: card_txn_id
+    type: int
+    required: true
+  - name: card_id
+    type: int
+    required: true
+  - name: txn_date
+    type: date
+    required: true
+  - name: merchant_category
+    type: string
+    required: false
+  - name: amount
+    type: decimal(18,2)
+    required: true
+  - name: is_fraud
+    type: int
+    required: true
+  - name: created_at
+    type: timestamp
+    required: true
+
+drift_policy:
+  new_field: warn
+  removed_required_field: fail
+  type_change: fail

@@ -12,8 +12,10 @@ fi
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks protect --staged --verbose --redact || { echo "✖ gitleaks found secrets" >&2; exit 1; }
 else
-  # fallback: block obvious tokens in staged diff
-  if git diff --cached | grep -Eiq '(DATABRICKS_TOKEN|AWS_SECRET_ACCESS_KEY|PII_HMAC_SECRET).*=.{8,}'; then
+  # fallback: block obvious tokens in staged diff (assignment of a value-like literal,
+  # not variable references like aws_secret_access_key=secret_key)
+  pattern="(DATABRICKS_TOKEN|AWS_SECRET_ACCESS_KEY|PII_HMAC_SECRET)[[:space:]]*=[[:space:]]*[\"']?[A-Za-z0-9/+_-]{16,}"
+  if git diff --cached | grep -Eiq "$pattern"; then
     # allow if value is REPLACE_ME placeholder
     if git diff --cached | grep -Eq 'REPLACE_ME'; then
       echo "⚠ staged file contains REPLACE_ME placeholder — ok for .env.example"
@@ -23,8 +25,8 @@ else
   fi
 fi
 
-# Large file guard 500KB
-large=$(git diff --cached --name-only | xargs -I{} sh -c 'test -f "{}" && wc -c < "{}"' 2>/dev/null | awk '$1>512000 {print $1}' | wc -l | tr -d ' ')
+# Large file guard 500KB (ACMR only — deletions have no file to stat)
+large=$(git diff --cached --name-only --diff-filter=ACMR | xargs -r -I{} sh -c 'test -f "{}" && wc -c < "{}"' 2>/dev/null | awk '$1>512000 {print $1}' | wc -l | tr -d ' ')
 if [ "${large:-0}" -gt 0 ]; then
   echo "⚠ staged file >500KB — if intentional use: git add -f <file>" >&2
 fi

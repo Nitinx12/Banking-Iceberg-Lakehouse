@@ -1,30 +1,101 @@
 version: 2
 models:
   - name: dim_customer
+    config:
+      contract: { enforced: true }
     columns:
       - name: customer_sk
+        data_type: varchar(64)
         tests: [not_null, unique]
       - name: customer_id
+        data_type: int
         tests: [not_null, unique]
+      - name: name
+        data_type: varchar(255)
+      - name: is_current
+        data_type: boolean
+      - name: valid_from
+        data_type: timestamp
+      - name: valid_to
+        data_type: timestamp
   - name: dim_account
+    config:
+      contract: { enforced: true }
     columns:
       - name: account_sk
+        data_type: varchar(64)
         tests: [not_null, unique]
       - name: account_id
+        data_type: int
         tests: [not_null]
+      - name: customer_id
+        data_type: int
+      - name: branch_id
+        data_type: int
+      - name: account_type
+        data_type: varchar(50)
+      - name: status
+        data_type: varchar(20)
+      - name: is_current
+        data_type: boolean
+      - name: valid_from
+        data_type: timestamp
+      - name: valid_to
+        data_type: timestamp
+  - name: dim_branch
+    config:
+      contract: { enforced: true }
+    columns:
+      - name: branch_id
+        data_type: int
+        tests: [not_null, unique]
+      - name: branch_name
+        data_type: varchar(255)
+      - name: city
+        data_type: varchar(100)
+      - name: state
+        data_type: varchar(100)
+      - name: ifsc_code
+        data_type: varchar(20)
   - name: fct_transactions
+    config:
+      contract: { enforced: true }
     columns:
       - name: transaction_id
+        data_type: int
         tests: [not_null, unique]
-      - name: amount
-        tests: [not_null]
       - name: account_id
+        data_type: int
         tests:
           - relationships:
               arguments:
                 to: ref('dim_account')
                 field: account_id
+      - name: account_sk
+        data_type: varchar(64)
+      - name: amount
+        data_type: decimal(18,2)
+        tests: [not_null]
+      - name: txn_date
+        data_type: date
+      - name: channel
+        data_type: varchar(50)
+      - name: _loaded_at
+        data_type: timestamp
   - name: fct_card_transactions
+    config:
+      contract: { enforced: true }
     columns:
       - name: card_txn_id
+        data_type: int
         tests: [not_null, unique]
+      - name: card_id
+        data_type: int
+      - name: amount
+        data_type: decimal(18,2)
+      - name: is_fraud
+        data_type: int
+      - name: txn_date
+        data_type: date
+      - name: _loaded_at
+        data_type: timestamp

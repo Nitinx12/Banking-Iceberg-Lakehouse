@@ -31,7 +31,7 @@ models:
       +schema: gold
       +on_schema_change: append_new_columns
       +contract:
-          enforced: false
+          enforced: true
 
 seeds:
   banking_dbt:

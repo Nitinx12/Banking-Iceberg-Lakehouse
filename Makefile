@@ -117,6 +117,10 @@ ingest_py:
 	bash scripts/sh/run_ingestion.sh $(if $(BATCH_ID),--batch-id $(BATCH_ID),) \
 	  || $(PY) -m jobs.ingestion.bronze --all
 
+silver_py:
+	@# all 10 Python Silver jobs in one Spark session (CE fallback for make silver)
+	$(PY) scripts/silver_all.py
+
 silver:
 	@echo "Silver (3 heavy tables) via Scala - $(HEAVY_NOTE)"
 	$(SBT) ";project $(SBT_PROJECT);runMain jobs.transform.scala.SilverAll"

@@ -13,6 +13,9 @@ Usage:
 
 import argparse
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 GOLD_SQL = {
     # mirrors dbt/banking_dbt/models/gold/dim_customer.sql

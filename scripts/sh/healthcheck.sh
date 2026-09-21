@@ -15,14 +15,51 @@ check() {
 
 log "healthcheck start"
 
-check "postgres" pg_isready -h "${POSTGRES_HOST:-localhost}" -p "${POSTGRES_PORT:-5433}" -U "${POSTGRES_USER:-postgres}"
-check "mongo" mongosh --host "${MONGO_HOST:-localhost}:${MONGO_PORT:-27018}" -u "${MONGO_INITDB_ROOT_USERNAME:-admin}" -p "${MONGO_INITDB_ROOT_PASSWORD:-admin}" --authenticationDatabase admin --eval 'db.adminCommand("ping")' --quiet 2>/dev/null || mongosh --quiet --eval 'db.adminCommand("ping").ok' 2>/dev/null || true
+# Prefer the containers' own client tools — the host may not have psql/pg_isready/
+# mongosh installed, and command-not-found must not read as "service down".
+PG_CONTAINER="$(docker ps --filter name=banking_postgres -q | head -1)"
+MONGO_CONTAINER="$(docker ps --filter name=banking_mongo -q | head -1)"
+
+pg_alive() {
+  if [[ -n "${PG_CONTAINER}" ]]; then
+    docker exec "${PG_CONTAINER}" pg_isready -U "${POSTGRES_USER:-postgres}" >/dev/null 2>&1
+  elif command -v pg_isready >/dev/null 2>&1; then
+    pg_isready -h "${POSTGRES_HOST:-localhost}" -p "${POSTGRES_PORT:-5433}" -U "${POSTGRES_USER:-postgres}" >/dev/null 2>&1
+  else
+    (exec 3<>"/dev/tcp/${POSTGRES_HOST:-localhost}/${POSTGRES_PORT:-5433}") 2>/dev/null
+  fi
+}
+
+mongo_alive() {
+  if [[ -n "${MONGO_CONTAINER}" ]]; then
+    docker exec "${MONGO_CONTAINER}" mongosh --quiet --eval 'db.adminCommand("ping").ok' >/dev/null 2>&1
+  elif command -v mongosh >/dev/null 2>&1; then
+    mongosh --host "${MONGO_HOST:-localhost}:${MONGO_PORT:-27018}" --quiet --eval 'db.adminCommand("ping").ok' >/dev/null 2>&1
+  else
+    (exec 3<>"/dev/tcp/${MONGO_HOST:-localhost}/${MONGO_PORT:-27018}") 2>/dev/null
+  fi
+}
+
+check "postgres" pg_alive
+check "mongo" mongo_alive
 check "minio" curl -f "http://localhost:9000/minio/health/live" 2>/dev/null || curl -f "${S3_ENDPOINT:-http://localhost:9000}/minio/health/live" 2>/dev/null || true
 
-# ops tables freshness (if pg reachable)
-if PGPASSWORD="${POSTGRES_PASSWORD:-}" psql -h "${POSTGRES_HOST:-localhost}" -p "${POSTGRES_PORT:-5433}" -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_WAREHOUSE_DB:-banking_dw}" -c "SELECT count(*) FROM ops.pipeline_runs;" >/dev/null 2>&1; then
+# ops tables freshness — prefer docker exec (psql ships in the container; the host
+# may not have psql installed, and command-not-found must not read as "db down")
+PG_CONTAINER="$(docker ps --filter name=banking_postgres -q | head -1)"
+psql_exec() {
+  if [[ -n "${PG_CONTAINER}" ]]; then
+    docker exec "${PG_CONTAINER}" psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_WAREHOUSE_DB:-banking_dw}" "$@"
+  elif command -v psql >/dev/null 2>&1; then
+    PGPASSWORD="${POSTGRES_PASSWORD:-}" psql -h "${POSTGRES_HOST:-localhost}" -p "${POSTGRES_PORT:-5433}" -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_WAREHOUSE_DB:-banking_dw}" "$@"
+  else
+    return 1
+  fi
+}
+
+if psql_exec -c "SELECT count(*) FROM ops.pipeline_runs;" >/dev/null 2>&1; then
   log "[ok] ops.pipeline_runs reachable"
-  PGPASSWORD="${POSTGRES_PASSWORD:-}" psql -h "${POSTGRES_HOST:-localhost}" -p "${POSTGRES_PORT:-5433}" -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_WAREHOUSE_DB:-banking_dw}" -c "SELECT stage, status, finished_at FROM ops.pipeline_runs ORDER BY finished_at DESC LIMIT 5;" 2>&1 | tee -a "${LOG_FILE}" || true
+  psql_exec -c "SELECT stage, status, finished_at FROM ops.pipeline_runs ORDER BY finished_at DESC LIMIT 5;" 2>&1 | tee -a "${LOG_FILE}" || true
 else
   warn "ops.pipeline_runs not reachable"
 fi

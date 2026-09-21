@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@8d55fbecc275b1c35dbe060458839f8d30439ccf # v3.8.0
         with:
           enable-cache: true
 
@@ -22,7 +22,7 @@ jobs:
         run: uv sync --group dev --frozen || uv sync --group dev
 
       - name: Secret scan (gitleaks)
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -39,7 +39,7 @@ jobs:
         run: uv run sqlfluff lint --dialect postgres dbt/banking_dbt/models --exclude-rules L003,L009,L010 2>&1 | head -n 120
 
       - name: Hadolint
-        uses: hadolint/hadolint-action@v3
+        uses: hadolint/hadolint-action@4b5806eb9c6bee4954fc0e0cc3ad6175fc9782c1 # v3.1.0
         with:
           dockerfile: airflow/Dockerfile
 
@@ -50,7 +50,7 @@ jobs:
         run: uv run pip-audit 2>&1 | tail -30
 
       - name: Trivy filesystem scan (HIGH/CRITICAL)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@6e7b7d1fd3e4fef0c5fa8cce1229c54b2c9bd0d8 # 0.24.0
         with:
           scan-type: fs
           severity: HIGH,CRITICAL

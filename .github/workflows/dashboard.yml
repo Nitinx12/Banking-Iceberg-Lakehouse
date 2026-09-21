@@ -11,8 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+      - uses: astral-sh/setup-uv@8d55fbecc275b1c35dbe060458839f8d30439ccf # v3.8.0
         with: { enable-cache: true }
       - run: uv sync --group dashboard --group dev --frozen || uv sync --group dashboard --group dev
       - name: Pages import cleanly (no DB needed at import time)

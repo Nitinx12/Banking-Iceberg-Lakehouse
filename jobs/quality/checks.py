@@ -155,9 +155,10 @@ def check_statistical(spark, run_id, batch_id, layer="silver"):
 
         logger.info(
             f"statistical checks null_rate={null_rate:.4f} "
-            f"volume_ok={volume_ok} shift_ok={shift_ok}"
+            f"volume_ok={volume_ok} shift_ok={shift_ok} — warn-only, not gating publish"
         )
-        return volume_ok and null_ok and shift_ok
+        # Architecture 11.2: warn never blocks — gate is gold reconciliation only
+        return True
     except Exception as e:
         logger.warning(f"statistical checks skipped: {e}")
         return True

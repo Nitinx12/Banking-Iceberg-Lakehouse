@@ -83,8 +83,13 @@ def run_gold(spark) -> dict[str, int]:
 def run_dq(spark, run_id: str) -> bool:
     from jobs.quality.checks import check_gold_reconciliation, check_statistical  # noqa: PLC0415
 
-    ok = check_statistical(spark, run_id, "n/a")
-    return check_gold_reconciliation(spark, run_id, "n/a") and ok
+    # Layer 5 statistical is warn-only per Architecture 11.1 — never block publish (fails closed only on critical/high)
+    # It still writes to ops.dq_results + Prometheus but gate is gold reconciliation only.
+    try:
+        check_statistical(spark, run_id, "n/a")
+    except Exception as e:  # noqa: BLE001
+        print(f"[warn] statistical skipped: {e}")
+    return check_gold_reconciliation(spark, run_id, "n/a")
 
 
 def run_publish(run_id: str) -> dict[str, int]:

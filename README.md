@@ -15,6 +15,12 @@ at http://localhost:9093. Set `SLACK_WEBHOOK_URL` in `.env` to route alerts to S
 SLO proof drills: `uv run python scripts/proof_slo.py` (forced freshness delay + forced
 critical DQ failure, both reversible). CE Gold build: `uv run python scripts/build_gold.py --publish`.
 
+**WSL2 note:** enable Docker Desktop -> Settings -> Resources -> WSL Integration for your
+distro, install a JDK (`sudo apt-get install -y openjdk-17-jdk` — PySpark needs one), and
+run `make setup` inside WSL so the venv carries all dependency groups (`dev` alone misses
+pymongo/sqlalchemy/dbt). The `.venv` is platform-specific: switching between Windows Git
+Bash and WSL requires re-running `make setup` on that side (uv rebuilds it).
+
 ```bash
 # 1. env
 cp .env.example .env   # then edit secrets (already generated locally)

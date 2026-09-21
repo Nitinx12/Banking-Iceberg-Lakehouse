@@ -12,9 +12,17 @@ DBT_SELECTOR ?= all
 BATCH_ID ?=
 JARS_DIR ?= jars
 
+# Per-platform venv: a venv is not portable across Windows and WSL sharing this
+# checkout. Linux (WSL) gets .venv-linux; Windows keeps the default .venv.
+UNAME := $(shell uname -s 2>/dev/null)
+ifeq ($(UNAME),Linux)
+export UV_PROJECT_ENVIRONMENT ?= .venv-linux
+endif
+
 SBT ?= sbt
 SBT_PROJECT := jobs.transform.scala
-HEAVY_NOTE := "requires sbt + jobs/transform/scala/build.sbt (Phase 7) — Python fallback: make ingest_py"
+# unquoted — recipe lines wrap this in their own quoting; nested quotes break /bin/sh
+HEAVY_NOTE := requires sbt + jobs/transform/scala/build.sbt (Phase 7) - Python fallback: make ingest_py
 
 .PHONY: help env setup hooks up down status health lint test test_fast \
         ingest ingest_py silver silver_scala gold publish monitor dq dbt_build \
@@ -63,7 +71,7 @@ env:
 	@if [ ! -f .env ]; then cp .env.example .env; echo "created .env from .env.example — EDIT secrets"; else echo ".env exists"; fi
 
 setup: env
-	$(UV) sync --group dev || pip install -e ".[dev]"
+	$(UV) sync --group dev --group ingestion --group transform --group quality --group dashboard
 	git config core.hooksPath .githooks
 	@echo "setup done — run: make up PROFILE=core"
 
@@ -101,7 +109,7 @@ monitor:
 # ---------------------------------------------------------------- heavy tasks (Scala)
 
 ingest:
-	@echo "Bronze ingestion via Scala $(HEAVY_NOTE)"
+	@echo "Bronze ingestion via Scala - $(HEAVY_NOTE)"
 	$(SBT) ";project $(SBT_PROJECT);runMain jobs.ingestion.scala.BronzeIngestion"
 
 ingest_py:
@@ -110,7 +118,7 @@ ingest_py:
 	  || $(PY) -m jobs.ingestion.bronze --all
 
 silver:
-	@echo "Silver (3 heavy tables) via Scala $(HEAVY_NOTE)"
+	@echo "Silver (3 heavy tables) via Scala - $(HEAVY_NOTE)"
 	$(SBT) ";project $(SBT_PROJECT);runMain jobs.transform.scala.SilverAll"
 
 silver_scala:
@@ -118,7 +126,7 @@ silver_scala:
 	$(SBT) ";project $(SBT_PROJECT);runMain jobs.transform.scala.$(TABLE)"
 
 gold:
-	@echo "Gold build via Scala $(HEAVY_NOTE)"
+	@echo "Gold build via Scala - $(HEAVY_NOTE)"
 	$(SBT) ";project $(SBT_PROJECT);runMain jobs.transform.scala.GoldBuild"
 
 # ---------------------------------------------------------------- other pipeline tasks

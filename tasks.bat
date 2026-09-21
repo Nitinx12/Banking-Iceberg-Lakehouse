@@ -1,5 +1,5 @@
 @echo off
-REM Banking Data Platform — tasks.bat mirror of Makefile (Architecture 16.1)
+REM Banking Data Platform - tasks.bat mirror of Makefile (Architecture 16.1)
 REM Heavy data tasks (Bronze/Silver/Gold) run Scala via sbt (Architecture 7.1: JVM shuffle
 REM for 2M+ row tables). Quick monitoring/ops tasks run shell/PowerShell wrappers.
 REM Usage: tasks.bat help | up | health | status | monitor | ingest | ingest_py | silver | ...
@@ -37,15 +37,15 @@ echo Unknown target: %CMD%
 goto help
 
 :help
-echo Banking Data Platform — tasks.bat targets
+echo Banking Data Platform - tasks.bat targets
 echo.
-echo HEAVY (Scala via sbt — Architecture 7.1):
+echo HEAVY (Scala via sbt - Architecture 7.1):
 echo   tasks.bat ingest        - Bronze ingestion (sbt, Phase 7 build.sbt required)
 echo   tasks.bat ingest_py     - Bronze via Python fallback (uv, no sbt needed)
 echo   tasks.bat silver        - Silver heavy tables (Scala: customers/transactions/card_txns)
 echo   tasks.bat gold          - Gold star-schema build (Scala)
 echo.
-echo QUICK MONITORING (shell/PowerShell — scripts/sh and scripts/ps1):
+echo QUICK MONITORING (shell/PowerShell - scripts/sh and scripts/ps1):
 echo   tasks.bat health        - service healthcheck (mongo/postgres/minio/airflow)
 echo   tasks.bat status        - pipeline run status + watermarks from ops tables
 echo   tasks.bat monitor       - dbt run_results.json report + Pushgateway metrics
@@ -72,7 +72,7 @@ goto :eof
 :env
 if not exist .env (
   copy /Y .env.example .env >nul
-  echo created .env from .env.example — EDIT secrets
+  echo created .env from .env.example - EDIT secrets
 ) else (
   echo .env exists
 )
@@ -82,12 +82,12 @@ goto :eof
 call :env
 where uv >nul 2>&1
 if %ERRORLEVEL%==0 (
-  uv sync --group dev --group ingestion --group dashboard
+  uv sync --group dev --group ingestion --group transform --group quality --group dashboard
 ) else (
-  echo uv not found — install from https://docs.astral.sh/uv/ or use pip
+  echo uv not found - install from https://docs.astral.sh/uv/ or use pip
 )
 git config core.hooksPath .githooks
-echo setup done — run: tasks.bat up core
+echo setup done - run: tasks.bat up core
 goto :eof
 
 :hooks
@@ -115,7 +115,7 @@ goto :eof
 :status
 echo == ops.pipeline_runs (latest 5) ==
 docker exec banking_postgres psql -U postgres -d banking_dw -c "select run_id, stage, status, rows_written, finished_at from ops.pipeline_runs order by started_at desc limit 5" 2>nul
-if %ERRORLEVEL% NEQ 0 echo postgres not reachable — tasks.bat up first
+if %ERRORLEVEL% NEQ 0 echo postgres not reachable - tasks.bat up first
 echo == watermarks ==
 docker exec banking_postgres psql -U postgres -d banking_dw -c "select collection, watermark_value, updated_at from ops.watermarks order by collection" 2>nul
 goto :eof
@@ -124,34 +124,34 @@ goto :eof
 if exist dbt\banking_dbt\target\run_results.json (
   scala-cli run dbt\monitor\dbt-report.scala -- dbt\banking_dbt\target\run_results.json
 ) else (
-  echo no run_results.json yet — run tasks.bat dbt_build first
+  echo no run_results.json yet - run tasks.bat dbt_build first
 )
 goto :eof
 
 REM ---------------------------------------------------------------- heavy tasks (Scala)
 
 :ingest
-echo Bronze ingestion via Scala — requires sbt + jobs\transform\scala\build.sbt (Phase 7)
+echo Bronze ingestion via Scala - requires sbt + jobs\transform\scala\build.sbt (Phase 7)
 sbt ";project jobs.transform.scala; runMain jobs.ingestion.scala.BronzeIngestion"
 goto :eof
 
 :ingest_py
-echo Bronze via Python fallback — proven CE path, same idempotency contract
+echo Bronze via Python fallback - proven CE path, same idempotency contract
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ps1\run_ingestion.ps1 %*
 goto :eof
 
 :silver
-echo Silver (3 heavy tables) via Scala — requires sbt + build.sbt (Phase 7)
+echo Silver (3 heavy tables) via Scala - requires sbt + build.sbt (Phase 7)
 sbt ";project jobs.transform.scala; runMain jobs.transform.scala.SilverAll"
 goto :eof
 
 :silver_scala
-echo Single-table Silver via Scala — usage: tasks.bat silver_scala SilverTransactions
+echo Single-table Silver via Scala - usage: tasks.bat silver_scala SilverTransactions
 sbt ";project jobs.transform.scala; runMain jobs.transform.scala.%ARG2%"
 goto :eof
 
 :gold
-echo Gold build via Scala — requires sbt + build.sbt (Phase 7)
+echo Gold build via Scala - requires sbt + build.sbt (Phase 7)
 sbt ";project jobs.transform.scala; runMain jobs.transform.scala.GoldBuild"
 goto :eof
 
@@ -203,7 +203,7 @@ terraform -chdir=terraform\envs\%TFENV% apply -input=false
 goto :eof
 
 :seed_mongo
-echo Seeding Mongo — requires compose core up
+echo Seeding Mongo - requires compose core up
 where uv >nul 2>&1
 if %ERRORLEVEL%==0 ( uv run python scripts\seed_mongo.py ) else ( python scripts\seed_mongo.py )
 goto :eof

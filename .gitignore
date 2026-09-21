@@ -7,6 +7,7 @@ dist/
 wheels/
 *.egg-info
 .venv/
+.venv-linux/
 pip-log.txt
 
 # Secrets — never committed (Architecture 14.1, PROJECT_PLAN Phase 0)

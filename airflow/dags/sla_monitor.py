@@ -1,4 +1,10 @@
-"""airflow/dags/sla_monitor.py — freshness + SLA/SLO per Architecture 12-13, every 5m."""
+"""airflow/dags/sla_monitor.py — freshness + SLA/SLO per Architecture 12-13, every 5m.
+
+Reads serving-layer freshness (max _loaded_at) into ops.freshness_metrics, then raises
+an ops.sla_events breach row when a table exceeds the freshness SLO (26h per
+Architecture 13.4). Every insert is a plain VALUES row — no cross-table INSERT...SELECT,
+so a partial table set degrades to fewer rows instead of an SQL error.
+"""
 
 from datetime import datetime, timedelta
 
@@ -9,6 +15,8 @@ default_args = {
     "retry_delay": timedelta(minutes=1),
     "execution_timeout": timedelta(minutes=5),
 }
+
+FRESHNESS_SLO_SECONDS = int(__import__("os").getenv("FRESHNESS_SLO_SECONDS", "93600"))  # 26h
 
 
 @dag(
@@ -21,36 +29,52 @@ default_args = {
     tags=["observability", "sla"],
 )
 def sla_monitor():
+
     @task
     def check_freshness():
         import os
 
         from sqlalchemy import create_engine, text
 
-        try:
-            eng = create_engine(
-                f"postgresql+psycopg2://{os.getenv('POSTGRES_USER', 'postgres')}:{os.getenv('POSTGRES_PASSWORD', '')}@{os.getenv('POSTGRES_HOST', 'postgres')}:{os.getenv('POSTGRES_PORT', '5432')}/{os.getenv('POSTGRES_WAREHOUSE_DB', 'banking_dw')}"
-            )
-            with eng.begin() as c:
-                # per-table freshness via Iceberg snapshot + _loaded_at per Architecture 13.4
-                for tbl in ["fct_transactions", "dim_customer", "dim_account"]:
-                    c.execute(
-                        text(
-                            "INSERT INTO ops.freshness_metrics (table_name, freshness_seconds, max_loaded_at) SELECT :t, EXTRACT(EPOCH FROM (now() - max(_loaded_at)))::bigint, max(_loaded_at) FROM serving."
-                            + tbl
-                            + " ON CONFLICT DO NOTHING"
-                        ),
-                        {"t": tbl},
+        import jobs.common.config as cfg
+
+        user = os.getenv("POSTGRES_USER", "postgres")
+        pw = os.getenv("POSTGRES_PASSWORD", "")
+        eng = create_engine(
+            f"postgresql+psycopg2://{user}:{pw}@{cfg.POSTGRES_HOST}:{cfg.POSTGRES_PORT}/{cfg.POSTGRES_WAREHOUSE_DB}",
+            pool_pre_ping=True,
+        )
+        tables = ["fct_transactions", "dim_customer", "dim_account"]
+        inserted = 0
+        with eng.begin() as c:
+            for tbl in tables:
+                # one row per table per check: real measured freshness, not a joined guess
+                row = c.execute(
+                    text(
+                        "SELECT COALESCE(EXTRACT(EPOCH FROM (now() - max(_loaded_at)))::bigint, 0), "
+                        "max(_loaded_at) FROM serving." + tbl
                     )
-                # also check serving.fct_transactions freshness via pushgateway metric data_freshness_seconds
-                # ops.sla_events per 13.5 — breach if > SLA (26h = 93600s)
+                ).fetchone()
+                if row is None or row[1] is None:
+                    continue
+                freshness, max_loaded = int(row[0]), row[1]
                 c.execute(
                     text(
-                        "INSERT INTO ops.sla_events (table_name, target_name, target_seconds, actual_seconds, breached) SELECT table_name, 'freshness_gold', 93600, freshness_seconds, freshness_seconds > 93600 FROM ops.freshness_metrics WHERE checked_at > now() - interval '10 minutes'"
-                    )
+                        "INSERT INTO ops.freshness_metrics (table_name, freshness_seconds, max_loaded_at) "
+                        "VALUES (:t, :f, :m)"
+                    ),
+                    {"t": tbl, "f": freshness, "m": max_loaded},
                 )
-        except Exception as e:
-            print(f"sla_monitor skipped: {e}")
+                if freshness > FRESHNESS_SLO_SECONDS:
+                    c.execute(
+                        text(
+                            "INSERT INTO ops.sla_events (table_name, target_name, target_seconds, actual_seconds, breached) "
+                            "VALUES (:t, 'freshness_gold', :slo, :a, true)"
+                        ),
+                        {"t": tbl, "slo": FRESHNESS_SLO_SECONDS, "a": freshness},
+                    )
+                    inserted += 1
+        print(f"sla_monitor: {len(tables)} tables checked, {inserted} SLA breach events")
 
     check_freshness()
 

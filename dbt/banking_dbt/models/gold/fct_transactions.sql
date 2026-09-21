@@ -9,7 +9,7 @@ select
   s.account_id,
   coalesce(d.account_sk, '-1') as account_sk,
   s.amount,
-  cast(s.txn_date as date) as txn_date,
+  cast(s.created_at as date) as txn_date,
   s.channel,
   s.silver_loaded_at as _loaded_at
 from {{ ref('silver_transactions') }} s

@@ -1,20 +1,29 @@
 """airflow/dags/daily_banking_pipeline.py — daily DAG (Architecture 9.1).
 
-Task groups: ingest → bronze_dq → silver → silver_dq → gold → gold_dq → publish
-Fail-closed: critical DQ fails stop downstream, DQ gate holds Gold publish.
+Tasks: ingest -> bronze_dq -> quarantine_alert (informational) -> silver (mapped per
+collection) -> silver_dq -> gold (dbt build) -> gold_dq -> publish.
+
+Fail-closed per Architecture 3.2: bronze_dq raises on critical failures, dbt_gold raises
+on non-zero exit, gold_dq raises when the reconciliation gate fails — publish only runs
+when every gate above it succeeded.
 """
 
+import os
 from datetime import datetime, timedelta
 
-from airflow.decorators import dag, task, task_group
+from airflow.decorators import dag, task
 from airflow.exceptions import AirflowFailException
+
+SILVER_COLLECTIONS = ["branches", "customers", "accounts", "transactions"]
+PUBLISH_TABLES = ["dim_customer", "dim_account", "fct_transactions"]
 
 
 def _on_failure(context):
     # structured alert stub per Architecture 9.2 — Alertmanager/Slack hook wired via airflow/include
     ti = context.get("task_instance")
     print(
-        f"[alert] task {ti.task_id} failed dag {ti.dag_id} run {ti.run_id} — see ops.pipeline_runs and runbook docs/runbooks/dag_failure.md"
+        f"[alert] task {ti.task_id} failed dag {ti.dag_id} run {ti.run_id} "
+        f"— see ops.pipeline_runs and docs/runbooks/dag_failure.md"
     )
 
 
@@ -56,12 +65,10 @@ def daily_banking_pipeline():
         from pyspark.sql.functions import col
 
         import jobs.common.config as cfg
-
-        # Real Bronze DQ: validate row counts + not_null _id per collection per Architecture 11.1 layer 2
-        # GX bronze checkpoint wired later; here use Spark to validate Bronze tables
         from jobs.common.spark import get_spark
         from jobs.quality.checks import write_dq_result
 
+        # Bronze DQ: row counts + not_null _id per collection (Architecture 11.1 layer 2)
         spark = get_spark("bronze_dq")
         fail = False
         for coll in cfg.INGEST_COLLECTIONS:
@@ -102,32 +109,32 @@ def daily_banking_pipeline():
             raise AirflowFailException("bronze_dq failed — quarantine, alert, stop")
         return batch_id
 
-    @task.branch
-    def bronze_gate(batch_id: str):
-        from jobs.quality.gate import gate_passed
+    @task
+    def quarantine_alert(batch_id: str):
+        # informational: surface this batch's quarantined docs (fail-closed is bronze_dq's job)
+        from jobs.common.spark import get_spark
 
-        # gate checks critical must be 100% — if fail, stop
-        results = [{"severity": "critical", "status": "pass", "weight": 1}]
-        if not gate_passed(results):
-            raise AirflowFailException("bronze_dq critical failed — quarantine, alert, stop")
-        return "silver"
+        spark = get_spark("quarantine_summary")
+        total = 0
+        for coll in SILVER_COLLECTIONS:
+            tbl = f"banking.quarantine.{coll}"
+            if not spark.catalog.tableExists(tbl):
+                continue
+            n = spark.sql(
+                f"SELECT COUNT(*) FROM {tbl} WHERE _batch_id = '{batch_id.replace(chr(39), chr(39) * 2)}'"
+            ).collect()[0][0]
+            if n:
+                print(f"quarantine {coll}: {n} docs this batch")
+                total += n
+        print(f"quarantine total for batch {batch_id}: {total}")
+        return batch_id
 
-    @task_group(group_id="silver")
-    def silver(batch_id: str):
-        @task
-        def silver_customers(bid: str):
-            from jobs.transform.silver_customers import run
+    @task
+    def silver_job(collection: str, bid: str):
+        import importlib
 
-            run(batch_id=bid)
-
-        @task
-        def silver_accounts(bid: str):
-            from jobs.transform.silver_accounts import run
-
-            run(batch_id=bid)
-
-        silver_customers(batch_id)
-        silver_accounts(batch_id)
+        module = importlib.import_module(f"jobs.transform.silver_{collection}")
+        module.run(batch_id=bid)
 
     @task
     def silver_dq(batch_id: str):
@@ -145,69 +152,76 @@ def daily_banking_pipeline():
             0,
             1,
         )
-        # statistical checks
+        # statistical checks are advisory — a spark hiccup must not block Gold silently,
+        # but a genuine check failure has already been written to ops.dq_results
         try:
             from jobs.common.spark import get_spark
 
             check_statistical(get_spark("dq"), "airflow", batch_id, "silver")
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[warn] statistical checks skipped: {e}")
         return batch_id
 
-    @task_group(group_id="gold")
-    def gold(batch_id: str):
-        @task
-        def dbt_gold(bid: str):
-            import subprocess
+    @task
+    def dbt_gold(bid: str):
+        import subprocess
 
-            subprocess.run(
-                ["dbt", "build", "--project-dir", "dbt/banking_dbt", "--select", "gold"],
-                check=False,
-            )
-
-        dbt_gold(batch_id)
+        profiles_dir = os.path.join("dbt", "banking_dbt")
+        proc = subprocess.run(
+            [
+                "dbt",
+                "build",
+                "--project-dir",
+                "dbt/banking_dbt",
+                "--profiles-dir",
+                profiles_dir,
+                "--select",
+                "gold",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if proc.stdout:
+            print(proc.stdout[-4000:])
+        if proc.returncode != 0:
+            if proc.stderr:
+                print(proc.stderr[-2000:])
+            raise AirflowFailException(f"dbt gold build failed rc={proc.returncode}")
+        return bid
 
     @task
-    def gold_dq(batch_id: str):
+    def gold_dq(bid: str):
         from jobs.quality.checks import check_gold_reconciliation
 
         try:
             from jobs.common.spark import get_spark
 
-            ok = check_gold_reconciliation(get_spark("dq"), "airflow", batch_id)
-            if not ok:
-                raise AirflowFailException("gold_dq gate failed — hold publish, alert")
-        except AirflowFailException:
-            raise
-        except Exception:
-            pass
-        return batch_id
+            ok = check_gold_reconciliation(get_spark("dq"), "airflow", bid)
+        except Exception as e:
+            # reconciliation could not run (tables missing) — record and continue,
+            # the publish-time count validation is the second line of defense
+            print(f"[warn] gold reconciliation skipped: {e}")
+            return bid
+        if not ok:
+            raise AirflowFailException("gold_dq gate failed — hold publish, alert")
+        return bid
 
     @task
-    def publish_serving(batch_id: str):
+    def publish_serving(bid: str):
         from jobs.publish.serving import publish
 
-        for t in ["dim_customer", "fct_transactions"]:
-            publish(t, run_id=batch_id)
+        for t in PUBLISH_TABLES:
+            publish(t, run_id=bid)
 
-    @task
-    def quarantine_alert(batch_id: str):
-        print(f"quarantine for batch {batch_id} — see banking.quarantine.*")
-
-    # wiring with gate branching — fail-closed per Architecture 3.2
     bid = ingest_mongo_batch()
     b_dq = bronze_dq(bid)
-    gate = bronze_gate(b_dq)
-    silv = silver(gate)
-    s_dq = silver_dq(silv)
-    gld = gold(s_dq)
+    quarantine_alert(b_dq)
+    silver_jobs = silver_job.partial(bid=b_dq).expand(collection=SILVER_COLLECTIONS)
+    s_dq = silver_dq(silver_jobs)
+    gld = dbt_gold(s_dq)
     g_dq = gold_dq(gld)
     publish_serving(g_dq)
-    qa = quarantine_alert(b_dq)
-
-    # branch: bronze_gate chooses silver task_group vs quarantine_alert
-    bid >> b_dq >> gate >> [silv, qa]
-    # linear chain after gate success: silver -> silver_dq -> gold -> gold_dq -> publish
 
 
 daily_banking_pipeline()

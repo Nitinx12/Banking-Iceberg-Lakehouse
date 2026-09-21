@@ -41,27 +41,26 @@ def iceberg_maintenance():
 
     @task
     def expire_snapshots():
+        import os
+
         from jobs.common.spark import get_spark
 
         spark = get_spark("maintenance")
-        # Bronze 7d, Silver/Gold 30d per 6.5 — use dynamic timestamp
-        spark.sql(
-            "CALL banking.system.expire_snapshots(table => 'banking.bronze.transactions', older_than => TIMESTAMP '2026-09-13' - INTERVAL 7 DAYS)"
-        )
-        # use now()-based expiry where supported:
-        try:
+        # Bronze 7d per Architecture 6.5 — relative to the current timestamp, never hardcoded
+        bronze_days = int(os.getenv("ICEBERG_BRONZE_RETENTION_DAYS", "7"))
+        for tbl in ["banking.bronze.transactions", "banking.bronze.card_transactions"]:
             spark.sql(
-                "CALL banking.system.expire_snapshots(table => 'banking.bronze.transactions', older_than => now() - INTERVAL 7 DAYS)"
+                f"CALL banking.system.expire_snapshots(table => '{tbl}', "
+                f"older_than => current_timestamp() - INTERVAL {bronze_days} DAYS)"
             )
-        except Exception:
-            pass
 
     @task
     def remove_orphan_files():
         from jobs.common.spark import get_spark
 
         spark = get_spark("maintenance")
-        spark.sql("CALL banking.system.remove_orphan_files(table => 'banking.bronze.transactions')")
+        for tbl in ["banking.bronze.transactions", "banking.bronze.card_transactions"]:
+            spark.sql(f"CALL banking.system.remove_orphan_files(table => '{tbl}')")
 
     r = rewrite_data_files()
     m = rewrite_manifests()

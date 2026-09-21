@@ -11,3 +11,13 @@ module "object_storage" {
   bucket_name = "banking-lakehouse"
   env         = "prod"
 }
+
+module "monitoring" {
+  source = "../../modules/monitoring"
+  env    = "prod"
+}
+
+module "databricks" {
+  source         = "../../modules/databricks"
+  workspace_host = var.databricks_host
+}

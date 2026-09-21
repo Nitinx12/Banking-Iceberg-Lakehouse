@@ -27,3 +27,8 @@ variable "catalog_app_password" {
   type      = string
   sensitive = true
 }
+
+variable "databricks_host" {
+  type    = string
+  default = ""
+}

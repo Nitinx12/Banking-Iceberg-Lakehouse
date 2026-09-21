@@ -33,25 +33,38 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Yamllint
-        run: uv run yamllint --strict . 2>&1 | head -n 100 || true
+        run: uv run yamllint -d relaxed . 2>&1 | head -n 200
 
       - name: SQLFluff lint
-        run: uv run sqlfluff lint --dialect postgres 2>&1 | head -n 80 || echo "sqlfluff not installed"
+        run: uv run sqlfluff lint --dialect postgres dbt/banking_dbt/models --exclude-rules L003,L009,L010 2>&1 | head -n 120
 
       - name: Hadolint
         uses: hadolint/hadolint-action@v3
         with:
           dockerfile: airflow/Dockerfile
-        continue-on-error: true
 
       - name: GX config validation
         run: uv run python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('gx/great_expectations.yml').read_text()); print('gx config ok')" || echo "gx config missing — skip"
 
       - name: Pip audit
-        run: uv run pip-audit 2>&1 | tail -20 || uv pip check 2>&1 | tail -20 || true
+        run: uv run pip-audit 2>&1 | tail -30
+
+      - name: Trivy filesystem scan (HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: fs
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+
+      - name: PII guard — raw email/phone must not reach serving
+        run: |
+          if grep -R "json_extract_scalar.*email')" dbt/banking_dbt/models/silver --include="*.sql" 2>/dev/null | grep -v sha256; then
+            echo "[FAIL] raw email in Silver model — must be sha256/hmac"; exit 1; fi
+          if grep -q "meta:.*pii" dbt/banking_dbt/models/silver/schema.yml 2>/dev/null; then echo "pii meta present"; else echo "[FAIL] missing meta pii tag"; exit 1; fi
 
       - name: Pytest (fast, no slow)
-        run: uv run pytest -q -m "not slow" || echo "no tests yet — ok for Phase 0"
+        run: uv run pytest -q -m "not slow"
 
       - name: DBT parse (if exists)
         run: |

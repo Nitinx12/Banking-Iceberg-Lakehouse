@@ -1,0 +1,34 @@
+name: Pin Guard
+# Architecture 14.5 — GitHub Actions must be pinned to commit SHA, not floating tags.
+# Until all workflows are SHA-pinned (tracked), this job warns (not blocks).
+# Dependabot (github-actions) will propose SHA updates weekly.
+on:
+  pull_request:
+    paths: [".github/workflows/**"]
+  push:
+    branches: [main]
+    paths: [".github/workflows/**"]
+permissions: { contents: read }
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check that third-party actions are SHA-pinned (warn)
+        shell: bash
+        run: |
+          echo "Checking for floating tags (uses: foo@vX) without SHA pin..."
+          # Allow local actions and docker/* - those are versioned by digest elsewhere
+          offenders=$(grep -R "uses:" .github/workflows --include="*.yml" | grep -E "uses:.*@[0-9a-f]{40}" -v | grep -E "uses:.*@v[0-9]" || true)
+          if [ -n "$offenders" ]; then
+            echo "::warning::Floating tags found (not yet SHA-pinned) — migrate to commit SHAs:"
+            echo "$offenders"
+            echo ""
+            echo "Fix: replace 'uses: foo/bar@v4' with 'uses: foo/bar@<sha> # v4.x.y'."
+            echo "Dependabot will update SHAs weekly once pinned."
+            # advisory only until full migration; flip to exit 1 to enforce
+          else
+            echo "All actions are SHA-pinned."
+          fi
+          # Always pass for now; don't block PRs during migration

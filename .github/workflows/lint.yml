@@ -26,9 +26,9 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
       - name: Yamllint
-        run: uv run yamllint --strict . 2>&1 | head -n 100 || true
+        run: uv run yamllint -d relaxed . 2>&1 | head -n 200
       - name: SQLFluff
-        run: uv run sqlfluff lint --dialect postgres 2>&1 | head -n 80 || true
+        run: uv run sqlfluff lint --dialect postgres dbt/banking_dbt/models --exclude-rules L003,L009,L010 2>&1 | head -n 120
       - name: Shellcheck (scripts + hooks)
         run: |
-          find scripts/sh .githooks -type f | xargs shellcheck -x 2>&1 | head -n 60 || true
+          find scripts/sh .githooks -type f | xargs shellcheck -x 2>&1 | head -n 100

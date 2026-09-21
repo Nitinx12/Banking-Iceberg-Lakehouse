@@ -63,6 +63,9 @@ jars/*.zip
 # GX uncommitted
 gx/uncommitted/
 
+# Backups — local pg_dump drills (Architecture 19), not committed
+backups/
+
 # Reports / artifacts
 .reports/
 test-results/

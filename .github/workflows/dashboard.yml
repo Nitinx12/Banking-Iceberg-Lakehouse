@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v7
         with: { enable-cache: true }
       - run: uv sync --group dashboard --group dev --frozen || uv sync --group dashboard --group dev
       - name: Pages import cleanly (no DB needed at import time)

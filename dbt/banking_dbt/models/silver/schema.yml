@@ -1,0 +1,25 @@
+version: 2
+models:
+  - name: silver_customers
+    config:
+      tags: ["silver"]
+    columns:
+      - name: email_hmac
+        description: HMAC-SHA256 of email using PII_HMAC_SECRET+salt (jobs/transform/silver_customers.py:44). Raw email never persists.
+        meta: { pii: true, pii_class: confidential }
+        tests: [not_null]
+      - name: phone_hmac
+        description: HMAC-SHA256 of phone using PII_HMAC_SECRET+salt. Raw phone never persists.
+        meta: { pii: true, pii_class: confidential }
+      - name: customer_id
+        tests: [not_null, unique]
+      - name: name
+        meta: { pii: true, pii_class: confidential }
+  - name: silver_accounts
+    columns:
+      - name: account_id
+        tests: [not_null, unique]
+  - name: silver_transactions
+    columns:
+      - name: transaction_id
+        tests: [not_null]

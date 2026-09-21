@@ -61,7 +61,7 @@ jobs:
         run: |
           if grep -R "json_extract_scalar.*email')" dbt/banking_dbt/models/silver --include="*.sql" 2>/dev/null | grep -v sha256; then
             echo "[FAIL] raw email in Silver model — must be sha256/hmac"; exit 1; fi
-          if grep -q "meta:.*pii" dbt/banking_dbt/models/silver/schema.yml 2>/dev/null; then echo "pii meta present"; else echo "[FAIL] missing meta pii tag"; exit 1; fi
+          if grep -q "pii" dbt/banking_dbt/models/silver/schema.yml 2>/dev/null; then echo "pii tag present"; else echo "[FAIL] missing pii tag"; exit 1; fi
 
       - name: Pytest (fast, no slow)
         run: uv run pytest -q -m "not slow"

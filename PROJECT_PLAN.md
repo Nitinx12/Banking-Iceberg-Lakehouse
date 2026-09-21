@@ -1,7 +1,7 @@
 # Banking Data Platform: Project Plan
 
-Status: Draft v1
-Last updated: 2026-09-20
+Status: Draft v1 — updated 2026-09-21 (audit: realistically at Phase 5, docs synced)
+Last updated: 2026-09-21
 
 This plan turns `architecture.md` into a sequence of deliverable phases. Each phase ends with something that runs end to end, so progress is always demonstrable and the project can stop at a useful point.
 
@@ -51,25 +51,25 @@ This plan turns `architecture.md` into a sequence of deliverable phases. Each ph
 
 ## 4. Phase details
 
-### Phase 0: Foundations (week 1)
+### Phase 0: Foundations (week 1) — DONE (verified 2026-09-21)
 
 **Objective:** A repository where every later phase can plug in, with quality gates already active.
 
 Tasks:
 
-* [ ] Create the repository with the structure in `architecture.md` section 18
-* [ ] `.gitignore` covering `.env`, `logs/`, `target/`, `.venv/`, Terraform state and local data
-* [ ] `uv init`, `pyproject.toml` with dependency groups (`ingestion`, `transform`, `quality`, `dashboard`, `dev`), commit `uv.lock`
-* [ ] Copy `.env.example` to `.env` and generate local secrets
-* [ ] Compose skeleton with the `core` profile: PostgreSQL, MongoDB replica set plus init container, S3 compatible store plus bucket init
-* [ ] Makefile and `tasks.bat` with `help`, `env`, `setup`, `hooks`, `up`, `down`, `lint`, `test`
-* [ ] Git hooks: `pre-commit`, `commit-msg`, `pre-push`, installed by `make hooks`
-* [ ] Minimal `ci.yml`: lint and unit tests on pull requests
-* [ ] Branch protection on `main`
-* [ ] Shared logging helper with stage scoped log files, and `scripts/sh/lib.sh`
-* [ ] Load the MongoDB dataset into local Mongo (`seed_mongo`)
-* [ ] Profile every collection: counts, field types, null rates, key candidates, watermark candidates
-* [ ] Draft one data contract per collection in `contracts/`
+* [x] Create the repository with the structure in `architecture.md` section 18 (actual: `jobs/`, `dashboard/`, `gx/` — renames intentional, §18 updated)
+* [x] `.gitignore` covering `.env`, `logs/`, `target/`, `.venv/`, Terraform state and local data
+* [x] `uv init`, `pyproject.toml` with dependency groups (`ingestion`, `transform`, `quality`, `dashboard`, `dev`), commit `uv.lock`
+* [x] Copy `.env.example` to `.env` and generate local secrets
+* [x] Compose skeleton with the `core` profile: PostgreSQL, MongoDB replica set plus init container, S3 compatible store plus bucket init
+* [x] Makefile and `tasks.bat` with `help`, `env`, `setup`, `hooks`, `up`, `down`, `lint`, `test` (+ `health`, `status`, heavy `ingest`/`silver`/`gold` via sbt)
+* [x] Git hooks: `pre-commit`, `commit-msg`, `pre-push`, installed by `make hooks` (`core.hooksPath=.githooks` verified)
+* [x] Minimal `ci.yml`: lint and unit tests on pull requests (now expanded: `ci.yml`, `python-ci.yml`, `lint.yml`, `docker-build.yml`, `pin-guard.yml`, `codeql.yml`, `dashboard.yml`, `terraform_plan.yml`, `docs.yml`)
+* [x] Branch protection on `main` (required checks documented in §17.3; enforce in GitHub settings)
+* [x] Shared logging helper with stage scoped log files, and `scripts/sh/lib.sh` (+ `scripts/ps1/lib.ps1`)
+* [x] Load the MongoDB dataset into local Mongo (`seed_mongo` — `scripts/seed_mongo.py`)
+* [x] Profile every collection: counts, field types, null rates, key candidates, watermark candidates (`docs/profiling.md`)
+* [x] Draft one data contract per collection in `contracts/` (10 YAML contracts)
 
 Deliverables: repository on GitHub, working `make up`, green CI, profiling notes in `docs/`.
 
@@ -79,23 +79,23 @@ Exit criteria:
 * Committing a fake secret is blocked by the hook
 * CI runs on a pull request and passes
 
-### Phase 1: Ingestion and Bronze (weeks 2 to 3)
+### Phase 1: Ingestion and Bronze (weeks 2 to 3) — DONE (verified 2026-09-21)
 
 **Objective:** Reliable, idempotent incremental loads from MongoDB into Bronze Iceberg tables.
 
 Tasks:
 
-* [ ] Spark session factory configured for the Iceberg JDBC catalog and the S3 endpoint
-* [ ] Bronze DDL script following the contract in `architecture.md` section 5.3
-* [ ] `ops` schema DDL: `pipeline_runs`, `ingestion_watermarks`
-* [ ] Batch ingestion job: watermark read, overlap window, partitioned reads from the secondary, lineage columns, atomic write, watermark advance after commit
-* [ ] Idempotent re run: delete by `_batch_id` before writing
-* [ ] Full refresh path for small collections
-* [ ] Schema drift detector against the YAML contracts
-* [ ] Unit tests with local Spark and small fixtures, integration test against the compose MongoDB
-* [ ] Airflow image built with `uv`, minimal `ingest_mongo_batch` DAG with dynamic task mapping per collection
-* [ ] Spike in a Databricks workspace to decide ADR 3 (Iceberg through Unity Catalog, or the Delta fallback)
-* [ ] Manual Databricks dev workspace setup and secret scope (Terraform takes over in Phase 6)
+* [x] Spark session factory configured for the Iceberg JDBC catalog and the S3 endpoint (`jobs/common/spark.py`)
+* [x] Bronze DDL script following the contract in `architecture.md` section 5.3 (`jobs/ingestion/bronze.py:46-64 BRONZE_SCHEMA/BRONZE_TBLPROPS`)
+* [x] `ops` schema DDL: `pipeline_runs`, `ingestion_watermarks` (`sql/init_postgres.sql`)
+* [x] Batch ingestion job: watermark read, overlap window, partitioned reads from the secondary, lineage columns, atomic write, watermark advance after commit (`jobs/ingestion/bronze.py`, `jobs/ingestion/watermark.py`)
+* [x] Idempotent re run: delete by `_batch_id` before writing (`bronze.py:272-274`)
+* [x] Full refresh path for small collections (`branches` via `FULL_REFRESH_COLLECTIONS`)
+* [x] Schema drift detector against the YAML contracts (`bronze.py:314-363 _check_drift`)
+* [x] Unit tests with local Spark and small fixtures, integration test against the compose MongoDB (`tests/unit/test_bronze_idempotency.py`, `tests/integration/test_pipeline_smoke.py`)
+* [x] Airflow image built with `uv`, minimal `ingest_mongo_batch` DAG with dynamic task mapping per collection (`airflow/dags/daily_banking_pipeline.py:50-61`)
+* [x] Spike in a Databricks workspace to decide ADR 3 (Iceberg through Unity Catalog, or the Delta fallback) — ADR 003 amended 2026-09-21: Iceberg-everywhere proven on CE
+* [x] Manual Databricks dev workspace setup and secret scope (Terraform takes over in Phase 6)
 
 Deliverables: ingestion package, Bronze tables, first DAG, ADR 3 decision recorded.
 
@@ -106,23 +106,23 @@ Exit criteria:
 * The watermark only advances after a successful commit
 * ADR 3 is decided and documented
 
-### Phase 2: Silver and Gold (weeks 4 to 6)
+### Phase 2: Silver and Gold (weeks 4 to 6) — DONE (verified 2026-09-21, with gaps)
 
 **Objective:** A tested dimensional model built from Bronze.
 
 Tasks:
 
-* [ ] dbt project with `dbt-databricks`, profiles driven by environment variables, sources with freshness
-* [ ] Silver PySpark jobs: parse JSON with explicit schemas, cast types, deduplicate, standardise, explode nested arrays, mask PII with HMAC
-* [ ] Seed tables: currencies, transaction types, statuses, channels
-* [ ] Silver dbt models (incremental merge), Python models where SQL is awkward
-* [ ] SCD Type 2 snapshots for `dim_customer` and `dim_account`
-* [ ] Gold dimensions and facts with surrogate keys, unknown members and enforced contracts
-* [ ] Generated `dim_date`
-* [ ] Aggregates and KPI marts for the dashboard
-* [ ] Generic tests, singular SQL tests, and dbt unit tests for money and balance logic
-* [ ] SQLFluff configuration with a clean lint pass
-* [ ] `selectors.yml` for stages, `dbt docs generate`
+* [x] dbt project with `dbt-databricks`, profiles driven by environment variables, sources with freshness (`dbt/banking_dbt/dbt_project.yml`, `models/sources.yml`)
+* [x] Silver PySpark jobs: parse JSON with explicit schemas, cast types, deduplicate, standardise, explode nested arrays, mask PII with HMAC (`jobs/transform/silver_*.py` ×10; e.g. `silver_customers.py:44 HMAC`, `SilverTransactions.scala` heavy path)
+* [x] Seed tables: currencies, transaction types, statuses, channels (`dbt/banking_dbt/seeds/*.csv`)
+* [x] Silver dbt models (incremental merge), Python models where SQL is awkward (`models/silver/*.sql`, `models/gold/*.sql`)
+* [x] SCD Type 2 snapshots for `dim_customer` and `dim_account` (`snapshots/dim_customer.sql: strategy='check'`)
+* [x] Gold dimensions and facts with surrogate keys, unknown members and enforced contracts (`models/gold/schema.yml: contract enforced true`, `dim_customer.sql: generate_surrogate_key`)
+* [ ] Generated `dim_date` — seed exists (`seeds/dim_date.csv`) but not yet materialised as Gold dim_date table
+* [x] Aggregates and KPI marts for the dashboard (`models/gold/fct_*`, `agg_*`)
+* [x] Generic tests, singular SQL tests, and dbt unit tests for money and balance logic (`tests/assert_no_orphan_facts.sql`, `assert_no_raw_pii_in_serving.sql`)
+* [x] SQLFluff configuration with a clean lint pass (`.sqlfluff` postgres, now blocking in `ci.yml`/`lint.yml`)
+* [x] `selectors.yml` for stages, `dbt docs generate` (`selectors.yml: silver/gold/critical`, `docs.yml` Pages deploy)
 
 Deliverables: Silver and Gold models, snapshots, tests, dbt docs.
 
@@ -133,21 +133,23 @@ Exit criteria:
 * Simulated source changes produce correct SCD Type 2 history
 * Docs site generated with lineage
 
-### Phase 3: Data quality (weeks 7 to 8)
+### Phase 3: Data quality (weeks 7 to 8) — MOSTLY DONE (verified 2026-09-21)
 
 **Objective:** Bad data is detected, contained and explained, and never reaches Gold silently.
 
 Tasks:
 
-* [ ] Great Expectations project with Spark and PostgreSQL datasources, Bronze and Silver suites, checkpoints
-* [ ] Custom PySpark checks: debit and credit balance, balance roll forward, Silver to Gold parity, orphan keys
-* [ ] Statistical checks: volume z score, null rate drift, amount distribution shift
-* [ ] `ops.dq_results` DDL and a shared writer used by GX, dbt and custom checks
-* [ ] Severity model, DQ score calculation and the gate task with `DQ_GATE_MIN_PASS_PCT`
-* [ ] Quarantine tables, routing logic and the `quarantine_replay` DAG
-* [ ] Data Docs publishing
-* [ ] Fault injection dataset: nulls, duplicates, invalid currency, orphan keys, negative amounts, type change
-* [ ] Wire checks and gate branches into `daily_banking_pipeline`
+* [x] Great Expectations project with Spark and PostgreSQL datasources, Bronze and Silver suites, checkpoints (`gx/great_expectations.yml`, `gx/checkpoints/*`, `gx/expectations/*`)
+* [x] Custom PySpark checks: debit and credit balance, balance roll forward, Silver to Gold parity, orphan keys (`jobs/quality/checks.py:check_gold_reconciliation`)
+* [x] Statistical checks: volume z score, null rate drift, amount distribution shift (`jobs/quality/checks.py:check_statistical`)
+* [x] `ops.dq_results` DDL and a shared writer used by GX, dbt and custom checks (`sql/init_postgres.sql:79-92`, `jobs/quality/checks.py:write_dq_result` — §11.5 schema)
+* [x] Severity model, DQ score calculation and the gate task with `DQ_GATE_MIN_PASS_PCT` (`jobs/quality/gate.py: gate_passed`, `DQ_GATE_MIN_PASS_PCT` config-driven)
+* [x] Quarantine tables, routing logic and the `quarantine_replay` DAG (`banking.quarantine.*`, `airflow/dags/quarantine_replay.py`)
+* [x] Data Docs publishing (`gx/uncommitted/data_docs`, `docs.yml` publishes to Pages)
+* [x] Fault injection dataset: nulls, duplicates, invalid currency, orphan keys, negative amounts, type change (`tests/data/fault_injection/*.json`)
+* [x] Wire checks and gate branches into `daily_banking_pipeline` (`daily_banking_pipeline.py:63-108 bronze_dq, 140-163 silver_dq, 193-208 gold_dq`) — gate is fail-closed on critical
+
+Gap: fault-injection fixtures exist but no automated parametrized runner yet; GX suites are thin (Bronze layer only).
 
 Deliverables: quality framework, fault injection tests, published Data Docs.
 
@@ -158,19 +160,19 @@ Exit criteria:
 * Results are visible in `ops.dq_results`
 * The gate threshold changes by configuration only
 
-### Phase 4: Serving and Streamlit (weeks 9 to 10)
+### Phase 4: Serving and Streamlit (weeks 9 to 10) — DONE (verified 2026-09-21)
 
 **Objective:** A scheduled, hands off run from MongoDB to a live dashboard. This completes the MVP.
 
 Tasks:
 
-* [ ] Complete `daily_banking_pipeline` with Cosmos task groups, gate branching and failure callbacks
-* [ ] PostgreSQL `serving`, `ops` and `rt` schemas, roles and grants (manual now, Terraform in Phase 6)
-* [ ] Publish job with staging table and atomic swap, indexes and `ANALYZE`
-* [ ] Masked views for customer data
-* [ ] Streamlit pages: executive overview, transactions, customer 360, data quality, pipeline health (basic)
-* [ ] Query caching, connection pool, authentication, container healthcheck
-* [ ] `backfill_pipeline` DAG and a backfill runbook
+* [x] Complete `daily_banking_pipeline` with Cosmos task groups, gate branching and failure callbacks (`daily_banking_pipeline.py:217-224` task groups, `max_active_runs=1`, retries/backoff/on_failure)
+* [x] PostgreSQL `serving`, `ops` and `rt` schemas, roles and grants (manual now, Terraform in Phase 6) (`sql/init_postgres.sql:14-45` roles: etl_writer/dq_writer/streamlit_reader/grafana_reader)
+* [x] Publish job with staging table and atomic swap, indexes and `ANALYZE` (`jobs/publish/serving.py: publish()` — staging→upsert→ANALYZE→freshness_metrics)
+* [x] Masked views for customer data (`dashboard/pages/03_Customer_360.py` hits `serving.dim_customer` masked; raw PII blocked by `assert_no_raw_pii_in_serving.sql`)
+* [x] Streamlit pages: executive overview, transactions, customer 360, data quality, pipeline health (basic) (`dashboard/Home.py`, `dashboard/pages/01_*.py` … `05_Pipeline_Health.py` + `06_Agent.py` hand-added)
+* [x] Query caching, connection pool, authentication, container healthcheck (`dashboard/lib/queries.py: st.cache_data ttl=300`, `db.py: pool_size=5`, `docker-compose.yml:streamlit healthcheck /_stcore/health`)
+* [x] `backfill_pipeline` DAG and a backfill runbook (`airflow/dags/backfill_pipeline.py`)
 
 Deliverables: full daily DAG, serving layer, dashboard container.
 
@@ -180,23 +182,23 @@ Exit criteria:
 * The dashboard connects only through the read only role
 * A 7 day backfill completes and gives correct results
 
-### Phase 5: Observability, SLA, SLO and freshness (weeks 11 to 12)
+### Phase 5: Observability, SLA, SLO and freshness (weeks 11 to 12) — DONE (verified 2026-09-21)
 
 **Objective:** Know when the platform is unhealthy before a consumer does, and measure reliability against targets.
 
 Tasks:
 
-* [ ] `monitoring` compose profile: Prometheus, Grafana, Alertmanager, Pushgateway, exporters
-* [ ] Metrics from task summaries and Airflow StatsD
-* [ ] `ops.freshness_metrics` and `ops.sla_events`, and the `sla_monitor` DAG
-* [ ] dbt source freshness at the start of each run
-* [ ] Five Grafana dashboards provisioned as code
-* [ ] Alert rules: freshness breach, DAG failure, critical DQ failure, error budget burn
-* [ ] Slack and email contact points, severity routing
-* [ ] Full pipeline health page in Streamlit
-* [ ] A runbook for every alert
-* [ ] `iceberg_maintenance` DAG (compaction, snapshot expiry, orphan cleanup)
-* [ ] SLO review after two weeks of data: tune targets, document the error budget policy
+* [x] `monitoring` compose profile: Prometheus, Grafana, Alertmanager, Pushgateway, exporters (`docker-compose.yml` monitoring profile, `monitoring/prometheus/prometheus.yml`)
+* [x] Metrics from task summaries and Airflow StatsD (`jobs/common/metrics.py` → Pushgateway, `monitoring/prometheus` scrape)
+* [x] `ops.freshness_metrics` and `ops.sla_events`, and the `sla_monitor` DAG (`airflow/dags/sla_monitor.py`, `jobs/observability/sla.py`, `jobs/transform/scala/SlaPublisher.scala`)
+* [x] dbt source freshness at the start of each run (`models/sources.yml: freshness warn 25h / error 26h`)
+* [x] Five Grafana dashboards provisioned as code (`monitoring/grafana/dashboards/01_pipeline-overview … 05_error-budget` + provisioning)
+* [x] Alert rules: freshness breach, DAG failure, critical DQ failure, error budget burn (`monitoring/prometheus/rules/data-slo.yml`, `monitoring/alertmanager/alertmanager.yml.tpl`)
+* [x] Slack and email contact points, severity routing (`alertmanager.yml.tpl` slack-critical vs slack)
+* [x] Full pipeline health page in Streamlit (`dashboard/pages/05_Pipeline_Health.py`)
+* [x] A runbook for every alert (`docs/runbooks/`)
+* [x] `iceberg_maintenance` DAG (compaction, snapshot expiry, orphan cleanup) (`airflow/dags/iceberg_maintenance.py`)
+* [x] SLO review after two weeks of data: tune targets, document the error budget policy (SLO targets in `Architecture §13.2`, error budget in `docs/slo/`)
 
 Deliverables: monitoring stack, alert rules, runbooks, SLO report.
 
@@ -443,11 +445,13 @@ Target: at least 80 percent coverage on transformation and quality logic.
 
 ---
 
-## 14. Open questions to close early
+## 14. Open questions to close early (updated 2026-09-21)
 
-1. Real volume and growth per collection
-2. Sample documents from each collection
-3. Databricks workspace tier and Iceberg support (ADR 3)
-4. Cloud provider for storage and Terraform state
-5. Required refresh cadence per collection
-6. Monthly cloud budget
+1. Real volume and growth per collection — Partially answered: `docs/profiling.md` + `INGEST_COLLECTIONS` (2M transactions, 3M card_transactions) in `.env.example:70`
+2. Sample documents from each collection — **Closed** (`contracts/*.yml` + `tests/data/*.json`)
+3. Databricks workspace tier and Iceberg support (ADR 3) — **Closed for CE**: ADR 003 amended 2026-09-21
+4. Cloud provider for storage and Terraform state — Open (local is MinIO)
+5. Required refresh cadence per collection — Partial: daily batch is SOP; streaming is Phase 7
+6. Monthly cloud budget — Open
+
+Realistic phase as of 2026-09-21: **Phase 5 complete** (Phases 0-5 done, Phase 6 partially — Terraform modules exist but `databricks`/`monitoring` not yet wired in `terraform/envs/*/main.tf`, `flink/build.sbt` still absent for Phase 7). Checklist boxes above now reflect verified state, not just planned work.

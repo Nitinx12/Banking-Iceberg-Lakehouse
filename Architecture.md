@@ -139,7 +139,7 @@ flowchart TD
 | Component | Role | Key design choice |
 |---|---|---|
 | MongoDB | Source of record | Runs as a replica set (required for change streams). Batch reads use the secondary. |
-| PySpark | Ingestion, cleansing, heavy joins | Packaged as a wheel. Runs in local mode for dev and on Databricks for real volume. |
+| PySpark | Ingestion, cleansing, heavy joins | Packaged as a wheel (`jobs`). Runs in local mode for dev and on Databricks for real volume. |
 | Apache Flink | Streaming CDC and windowed aggregates | Stretch phase. Flink SQL jobs, checkpoints to object storage. |
 | Apache Iceberg | Open table format for every lake layer | Format version 2, merge on read, catalog backed by PostgreSQL. |
 | Databricks | Managed Spark compute and the dbt target | Jobs run under a service principal. Provisioned by Terraform. |
@@ -312,7 +312,7 @@ Responsibilities: parse Bronze JSON with an explicit `StructType`, cast types, d
 
 Standards:
 
-* Package as a wheel with `uv build` and run with `spark-submit` locally or through the Databricks Jobs API.
+* **Python path:** package as a wheel with `uv build` and run with `spark-submit` locally or through the Databricks Jobs API. **Scala path (heavy 2M+ tables):** `sbt package` under `jobs/transform/scala/` (Spark 3.5.5 / Iceberg 1.5.2 pinned in `build.sbt:14-22`); same CLI `--run-id/--batch-id/--env` is required — Scala jobs must emit the same `ops.pipeline_runs` JSON summary (see `jobs/transform/scala/PipelineMetrics.scala`).
 * Use broadcast joins for small dimensions, explicit partition control on writes, and no `collect()` on large data.
 * Pass every job a `--run-id`, `--batch-id` and `--env`. Emit a JSON summary (rows read, written, rejected, duration) to `ops.pipeline_runs`.
 
@@ -422,15 +422,15 @@ Implementation notes: `st.cache_data(ttl=...)` on every query, a connection pool
 
 ### 9.1 DAG catalog
 
-| DAG | Schedule | Purpose |
-|---|---|---|
-| `daily_banking_pipeline` | Daily at a configurable business time | Task groups: ingest, bronze_dq, silver, silver_dq, gold, gold_dq, publish |
-| `iceberg_maintenance` | Daily and weekly | Compaction, snapshot expiry, orphan cleanup |
-| `sla_monitor` | Every 5 minutes | Compute freshness and SLIs, write to `ops`, raise alerts |
-| `flink_supervisor` | Every 5 minutes | Check job state, checkpoint age, restart from savepoint |
-| `quarantine_replay` | Manual | Reprocess quarantined rows after a fix |
-| `backfill_pipeline` | Manual, parameterised | Re run a date range through selected stages |
-| `dbt_docs_refresh` | Daily | Regenerate and publish dbt docs |
+| DAG | Schedule | Purpose | Status |
+|---|---|---|---|
+| `daily_banking_pipeline` | Daily at a configurable business time | Task groups: ingest, bronze_dq, silver (mapped), silver_dq, gold (dbt), gold_dq, publish | Live (`airflow/dags/daily_banking_pipeline.py`) |
+| `iceberg_maintenance` | Daily and weekly | Compaction, snapshot expiry, orphan cleanup | Live |
+| `sla_monitor` | Every 5 minutes | Compute freshness and SLIs, write to `ops`, raise alerts | Live |
+| `flink_supervisor` | Every 5 minutes | Check job state, checkpoint age, restart from savepoint | Deferred to Phase 7 — Flink DataStream sbt not yet scaffolded |
+| `quarantine_replay` | Manual | Reprocess quarantined rows after a fix | Live (stub) |
+| `backfill_pipeline` | Manual, parameterised | Re run a date range through selected stages | Live (stub) |
+| `dbt_docs_refresh` | Daily | Regenerate and publish dbt docs | Handled by `docs.yml` Pages deploy until DAG is needed |
 
 ### 9.2 Design rules
 
@@ -806,11 +806,19 @@ Policy: `--no-verify` is not used. CI repeats every check, so a skipped hook can
 
 | Workflow | Trigger | Jobs |
 |---|---|---|
-| `ci.yml` | Pull request | Lint (ruff, SQLFluff, shellcheck, yamllint, hadolint), unit tests, `dbt parse` and compile, GX config validation, Docker build, secret scan, dependency audit |
+| `ci.yml` | Pull request | Lint (ruff, SQLFluff, shellcheck, yamllint, hadolint), unit tests, `dbt parse` and compile, GX config validation, Docker build, secret scan, Trivy FS, PII guard, dependency audit |
 | `terraform_plan.yml` | Pull request touching `terraform/` | fmt, validate, tflint, plan posted as a comment |
 | `cd.yml` | Merge to `main` | Build and push images, `terraform apply` dev then staging, deploy DAGs, slim `dbt build`, smoke tests, manual approval, then prod |
 | `nightly_integration.yml` | Nightly | Full pipeline on dev Databricks with sample data, data diff, DQ gate test |
 | `docs.yml` | Merge to `main` | Publish dbt docs and Data Docs to GitHub Pages |
+| `python-ci.yml` | PR touching `jobs/**`, `tests/**` | Full suite incl. `slow` (Spark) + coverage ≥80% on transform/quality (reported, not hard-gated) |
+| `scala.yml` | PR touching `flink/**` | `sbt scalafmtCheckAll scalafix --check compile` (Flint DataStream Phase 7) |
+| `lint.yml` | Push to `main` touching `**.{py,yml,sql}` | `ruff` + `yamllint --strict` + `sqlfluff` + `shellcheck` (main-branch mirror of CI, now blocking) |
+| `docker-build.yml` | PR touching `docker/**`, `airflow/Dockerfile` | `hadolint` + matrix build (airflow alt), GH cache |
+| `dashboard.yml` | PR touching `dashboard/**` | Import check for every page (no DB needed) |
+| `codeql.yml` | Push/PR + weekly | CodeQL security-extended for `python, actions` |
+| `pin-guard.yml` | PR touching `workflows/**` | Warn if actions not SHA-pinned (Architecture 14.5, Dependabot weekly) |
+| `stale.yml` | Scheduled | Stale issue/PR bot |
 
 ### 17.2 Promotion flow
 
@@ -833,58 +841,66 @@ feature branch → PR (CI) → merge to main → dev (auto) → staging (auto af
 ```
 banking_data_platform/
 ├── .github/
-│   ├── workflows/            ci.yml, cd.yml, terraform_plan.yml, nightly_integration.yml, docs.yml
+│   ├── workflows/            ci.yml, cd.yml, terraform_plan.yml, nightly_integration.yml, docs.yml,
+│   │                         python-ci.yml, scala.yml, lint.yml, docker-build.yml, dashboard.yml,
+│   │                         codeql.yml, pin-guard.yml, stale.yml (see §17.1)
 │   ├── dependabot.yml
 │   └── CODEOWNERS
 ├── .githooks/                pre-commit, commit-msg, pre-push
 ├── airflow/
-│   ├── dags/
+│   ├── dags/                 daily_banking_pipeline, iceberg_maintenance, sla_monitor, quarantine_replay, backfill_pipeline
 │   ├── include/              shared config, SQL, dbt selectors
 │   ├── plugins/
 │   └── Dockerfile
-├── spark_jobs/               installable package
+├── jobs/                     installable package (renamed from spark_jobs — shorter import `jobs.*`)
 │   ├── ingestion/
-│   ├── transform/
+│   ├── transform/            + scala/ (sbt heavy jobs for 2M+ tables — ADR 12)
 │   ├── quality/
 │   ├── publish/
-│   ├── maintenance/
-│   └── common/               logging, config, io, metrics
-├── contracts/                one YAML contract per collection
+│   ├── observability/        (renamed from maintenance — sla/freshness)
+│   └── common/               logging, config, spark, metrics
+├── contracts/                one YAML contract per collection (10)
 ├── dbt/banking_dbt/
-│   ├── models/               staging, silver, gold
-│   ├── snapshots/
+│   ├── models/               staging, silver, gold + silver/schema.yml (pii meta)
+│   ├── snapshots/            dim_customer, dim_account (SCD2 check)
 │   ├── seeds/
 │   ├── macros/
-│   ├── tests/
+│   ├── tests/                assert_no_orphan_facts, assert_no_raw_pii_in_serving
 │   ├── selectors.yml
 │   └── dbt_project.yml
-├── great_expectations/       suites, checkpoints, data docs config
+├── gx/                       GX suites, checkpoints, data docs (renamed from great_expectations — GX 0.18+ convention)
 ├── flink/
-│   ├── sql/
+│   ├── sql/                  cdc_transactions.sql (Flink SQL; DataStream sbt deferred to Phase 7)
 │   └── conf/
-├── streamlit_app/
-│   ├── pages/
-│   └── app.py
+├── dashboard/                Streamlit app (renamed from streamlit_app)
+│   ├── Home.py
+│   ├── pages/                01_Executive … 06_Agent, 06_Lineage_Docs
+│   ├── lib/                  db.py (pool), queries.py (cache ttl=300)
+│   └── .streamlit/config.toml
+├── agents/                   LangGraph+OpenAI Gold agent (ADR 007) over serving.* read-only
 ├── terraform/                modules and envs (section 15)
 ├── monitoring/
-│   ├── prometheus/
-│   ├── alertmanager/
-│   └── grafana/              dashboards and provisioning as code
+│   ├── prometheus/           prometheus.yml + rules/data-slo.yml
+│   ├── alertmanager/         alertmanager.yml.tpl
+│   ├── grafana/              dashboards (5) + provisioning as code
+│   └── scala/                PrometheusMetricsExporter, GrafanaValidator (helper)
 ├── scripts/
-│   ├── sh/
-│   ├── ps1/
+│   ├── sh/                   12 scripts + lib.sh
+│   ├── ps1/                  12 mirrors + lib.ps1
 │   └── bat/
 ├── docker/                   Dockerfiles per service
 ├── docs/
 │   ├── runbooks/
 │   ├── incidents/
 │   └── adr/
+├── sql/                      init_postgres.sql (ops + serving DDL)
+├── jars/                     pinned Spark/Iceberg JARs for offline runs
 ├── tests/
 │   ├── unit/
 │   ├── integration/
-│   └── data/                 small sample datasets
+│   └── data/                 small samples + fault_injection/
 ├── docker-compose.yml
-├── Makefile
+├── Makefile                  heavy (sbt) + quick (shell) targets; tasks.bat mirrors
 ├── tasks.bat
 ├── pyproject.toml
 ├── uv.lock
@@ -932,15 +948,15 @@ banking_data_platform/
 | 9 | Flink CDC direct from MongoDB | Kafka or Redpanda buffer | Fewer moving parts, weaker replay | Revisit at Phase 7 |
 | 10 | Astronomer Cosmos for dbt in Airflow | BashOperator calling dbt | Per model tasks and retries, extra dependency | Accepted |
 | 11 | Gold build path: dbt SQL canonical, Spark CE mirroring | dbt-only on Databricks | Single source of truth + local verifiability | Accepted (ADR 006, M3 deviation documented) |
-| 12 | sbt heavy jobs deferred; Python fallback is CE path | Build sbt first | Unblocks MVP 0-4, Phase 7 scaffolds sbt | Known gap — `build.sbt` missing until Phase 7; `make ingest_py` is proven path |
+| 12 | sbt heavy jobs for 2M+ tables; Python fallback remains CE path | Build sbt first | Efficient JVM shuffle, unblocks MVP | Amended 2026-09-21: `jobs/transform/scala/build.sbt` thin scaffold live (3 tables, pins Spark 3.5.5/Iceberg 1.5.2); full parity (`--run-id/--batch-id/--env` + `ops.pipeline_runs` JSON) still TODO — track in §7.1 |
 
 ---
 
 ## 21. Open questions
 
-1. Real volume and growth of each collection (decides partitioning, cluster size, and whether Databricks is needed at all for a given step).
-2. A sample document from each collection, to finalise contracts and Silver schemas.
-3. Databricks workspace tier and whether Iceberg through Unity Catalog is available (ADR 3).
-4. Cloud provider for object storage and Terraform state.
-5. Refresh cadence the business needs: daily, hourly, or near real time per collection.
-6. Budget ceiling for cloud spend, which decides how long dev and staging stay running.
+1. Real volume and growth of each collection (decides partitioning, cluster size, and whether Databricks is needed at all for a given step). — Partially answered: `docs/profiling.md` + `INGEST_COLLECTIONS` (2M transactions, 3M card_transactions) in `.env.example:70`.
+2. A sample document from each collection, to finalise contracts and Silver schemas. — **Closed**: `contracts/*.yml` (10) + `tests/data/*.json` samples exist; field-level null rates profiled.
+3. Databricks workspace tier and whether Iceberg through Unity Catalog is available (ADR 3). — **Closed for CE**: ADR 003 amended 2026-09-21 — Iceberg-everywhere via JDBC `banking` on `iceberg_catalog` proven; Delta fallback remains paid-workspace-only.
+4. Cloud provider for object storage and Terraform state. — Open (local is MinIO; `terraform/modules/object_storage` defaults to `banking-lakehouse` bucket).
+5. Refresh cadence the business needs: daily, hourly, or near real time per collection. — Partial: daily batch is SOP (`daily_banking_pipeline` @daily); streaming is Phase 7 stretch.
+6. Budget ceiling for cloud spend, which decides how long dev and staging stay running. — Open.

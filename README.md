@@ -2,7 +2,7 @@
   <img src="assets/image.png" alt="HDFC Lakehouse" width="680"/>
 </p>
 
-<h1 align="center">HDFC Banking Data Platform — Lakehouse</h1>
+<h1 align="center">Banking Data Platform — Lakehouse</h1>
 
 <p align="center">
   <b>MongoDB → Iceberg (Bronze/Silver/Gold) → PostgreSQL → Streamlit</b><br/>

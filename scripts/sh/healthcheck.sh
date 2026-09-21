@@ -10,7 +10,7 @@ LOG_FILE="${LOG_DIR}/${STAGE}.log"
 FAIL=0
 check() {
   local name="$1"; shift
-  if "$@" >/dev/null 2>&1; then log "✓ ${name}"; else warn "✗ ${name}"; FAIL=1; fi
+  if "$@" >/dev/null 2>&1; then log "[ok] ${name}"; else warn "[FAIL] ${name}"; FAIL=1; fi
 }
 
 log "healthcheck start"
@@ -21,7 +21,7 @@ check "minio" curl -f "http://localhost:9000/minio/health/live" 2>/dev/null || c
 
 # ops tables freshness (if pg reachable)
 if PGPASSWORD="${POSTGRES_PASSWORD:-}" psql -h "${POSTGRES_HOST:-localhost}" -p "${POSTGRES_PORT:-5433}" -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_WAREHOUSE_DB:-banking_dw}" -c "SELECT count(*) FROM ops.pipeline_runs;" >/dev/null 2>&1; then
-  log "✓ ops.pipeline_runs reachable"
+  log "[ok] ops.pipeline_runs reachable"
   PGPASSWORD="${POSTGRES_PASSWORD:-}" psql -h "${POSTGRES_HOST:-localhost}" -p "${POSTGRES_PORT:-5433}" -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_WAREHOUSE_DB:-banking_dw}" -c "SELECT stage, status, finished_at FROM ops.pipeline_runs ORDER BY finished_at DESC LIMIT 5;" 2>&1 | tee -a "${LOG_FILE}" || true
 else
   warn "ops.pipeline_runs not reachable"

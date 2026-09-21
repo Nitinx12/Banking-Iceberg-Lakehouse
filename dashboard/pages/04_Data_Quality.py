@@ -1,7 +1,7 @@
 import streamlit as st
 
 st.set_page_config(page_title="Data Quality", layout="wide")
-st.title("✅ Data Quality")
+st.title("Data Quality")
 st.caption("Latest DQ score, failing checks, quarantine counts, trend (Architecture 11)")
 
 try:

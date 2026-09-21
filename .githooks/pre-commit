@@ -4,13 +4,13 @@ set -euo pipefail
 
 # Block .env and secrets
 if git diff --cached --name-only | grep -Eq '^\.env(\.docker)?$'; then
-  echo "✖ refusing to commit .env or .env.docker (use .env.example)" >&2
+  echo "[FAIL] refusing to commit .env or .env.docker (use .env.example)" >&2
   exit 1
 fi
 
 # Simple secret scan on staged files (gitleaks if installed)
 if command -v gitleaks >/dev/null 2>&1; then
-  gitleaks protect --staged --verbose --redact || { echo "✖ gitleaks found secrets" >&2; exit 1; }
+  gitleaks protect --staged --verbose --redact || { echo "[FAIL] gitleaks found secrets" >&2; exit 1; }
 else
   # fallback: block obvious tokens in staged diff (assignment of a value-like literal,
   # not variable references like aws_secret_access_key=secret_key)
@@ -18,9 +18,9 @@ else
   if git diff --cached | grep -Eiq "$pattern"; then
     # allow if value is REPLACE_ME placeholder
     if git diff --cached | grep -Eq 'REPLACE_ME'; then
-      echo "⚠ staged file contains REPLACE_ME placeholder — ok for .env.example"
+      echo "[warn] staged file contains REPLACE_ME placeholder — ok for .env.example"
     else
-      echo "⚠ staged diff contains potential secret — review .env handling" >&2
+      echo "[warn] staged diff contains potential secret — review .env handling" >&2
     fi
   fi
 fi
@@ -28,16 +28,37 @@ fi
 # Large file guard 500KB (ACMR only — deletions have no file to stat)
 large=$(git diff --cached --name-only --diff-filter=ACMR | xargs -r -I{} sh -c 'test -f "{}" && wc -c < "{}"' 2>/dev/null | awk '$1>512000 {print $1}' | wc -l | tr -d ' ')
 if [ "${large:-0}" -gt 0 ]; then
-  echo "⚠ staged file >500KB — if intentional use: git add -f <file>" >&2
+  echo "[warn] staged file >500KB — if intentional use: git add -f <file>" >&2
+fi
+
+# No emoji/pictographs in code — plain-text markers only ([ok], [warn], [FAIL], ->)
+if command -v uv >/dev/null 2>&1; then
+  uv run python - <<'EOF' || { echo "[FAIL] emoji in staged code files — use plain-text markers" >&2; exit 1; }
+import pathlib, re, subprocess, sys
+emoji = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u2139\u2190-\u21FF]")
+code = {".py", ".sh", ".bat", ".ps1", ".scala", ".sql", ".tf", ".hcl", ".yml", ".yaml"}
+files = subprocess.run(
+    ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+    capture_output=True, text=True,
+).stdout.split()
+bad = []
+for f in files:
+    p = pathlib.Path(f)
+    if p.suffix.lower() in code and emoji.search(p.read_text(encoding="utf-8", errors="ignore")):
+        bad.append(f)
+if bad:
+    print("emoji/symbols found in:", ", ".join(bad))
+sys.exit(1 if bad else 0)
+EOF
 fi
 
 # ruff format + lint on staged Python (fast)
 if command -v uv >/dev/null 2>&1; then
-  uv run ruff format --check . >/dev/null 2>&1 || { echo "✖ ruff format check failed — run: make lint or uv run ruff format ."; exit 1; }
-  uv run ruff check . >/dev/null 2>&1 || { echo "✖ ruff check failed — run: uv run ruff check ."; exit 1; }
+  uv run ruff format --check . >/dev/null 2>&1 || { echo "[FAIL] ruff format check failed — run: make lint or uv run ruff format ."; exit 1; }
+  uv run ruff check . >/dev/null 2>&1 || { echo "[FAIL] ruff check failed — run: uv run ruff check ."; exit 1; }
 elif command -v ruff >/dev/null 2>&1; then
-  ruff format --check . >/dev/null 2>&1 || { echo "✖ ruff format check failed"; exit 1; }
-  ruff check . >/dev/null 2>&1 || { echo "✖ ruff check failed"; exit 1; }
+  ruff format --check . >/dev/null 2>&1 || { echo "[FAIL] ruff format check failed"; exit 1; }
+  ruff check . >/dev/null 2>&1 || { echo "[FAIL] ruff check failed"; exit 1; }
 fi
 
 # yamllint on changed YAML
@@ -52,8 +73,8 @@ fi
 if command -v terraform >/dev/null 2>&1; then
   tf_changed=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.tf$' || true)
   if [ -n "$tf_changed" ]; then
-    terraform fmt -check -diff $(git diff --cached --name-only | xargs dirname | sort -u) 2>&1 | head -40 || { echo "✖ terraform fmt check failed"; exit 1; }
+    terraform fmt -check -diff $(git diff --cached --name-only | xargs dirname | sort -u) 2>&1 | head -40 || { echo "[FAIL] terraform fmt check failed"; exit 1; }
   fi
 fi
 
-echo "✓ pre-commit passed"
+echo "[ok] pre-commit passed"

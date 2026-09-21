@@ -1,7 +1,7 @@
 import streamlit as st
 
 st.set_page_config(page_title="Customer 360", layout="wide")
-st.title("👤 Customer 360")
+st.title("Customer 360")
 st.caption(
     "Masked customer profile, accounts, activity timeline (Architecture 14.2 PII masked views)"
 )

@@ -9,7 +9,7 @@ def _doc_hash(s: str):
 
 
 def test_batch_id_idempotent_delete():
-    # Simulate: same batch written twice → delete by _batch_id before write → identical counts
+    # Simulate: same batch written twice -> delete by _batch_id before write -> identical counts
     batch_id = "local-20260920-abc123"
     rows_batch = [("id1", "{}", "insert"), ("id2", "{}", "insert")]
     # first write

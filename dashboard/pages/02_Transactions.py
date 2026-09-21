@@ -1,7 +1,7 @@
 import streamlit as st
 
 st.set_page_config(page_title="Transactions", layout="wide")
-st.title("💳 Transactions")
+st.title("Transactions")
 st.caption("Volume by channel and branch, high value table, live alerts panel (streaming Phase 7)")
 
 
@@ -48,7 +48,7 @@ try:
     st.subheader("Top 50 high-value transactions")
     st.dataframe(high_value, use_container_width=True, hide_index=True)
 
-    st.subheader("🚨 Live alerts")
+    st.subheader("Live alerts")
     st.info("rt.txn_alerts goes live with the Flink streaming phase (PROJECT_PLAN Phase 7).")
 except Exception as e:
     st.warning(f"serving.fct_transactions not reachable yet — run the daily pipeline first: {e}")

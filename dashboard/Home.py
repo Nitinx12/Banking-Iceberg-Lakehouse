@@ -7,13 +7,12 @@ import streamlit as st
 
 st.set_page_config(
     page_title="HDFC Banking — Home",
-    page_icon="🏦",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-st.title("🏦 HDFC Banking Data Platform")
-st.caption("MongoDB → Iceberg lakehouse → PostgreSQL serving → Streamlit (Architecture 8.4)")
+st.title("HDFC Banking Data Platform")
+st.caption("MongoDB -> Iceberg lakehouse -> PostgreSQL serving -> Streamlit (Architecture 8.4)")
 
 
 @st.cache_data(ttl=300)

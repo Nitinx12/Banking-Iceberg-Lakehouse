@@ -1,7 +1,7 @@
 import streamlit as st
 
 st.set_page_config(page_title="Executive Overview", layout="wide")
-st.title("📊 Executive Overview")
+st.title("Executive Overview")
 st.caption(
     "Deposits, transaction volume, active customers, loan portfolio, trends (Architecture 8.4)"
 )

@@ -1,4 +1,4 @@
-// dbt/monitor/dbt-report.scala — dbt run_results.json → console report + Pushgateway metrics
+// dbt/monitor/dbt-report.scala — dbt run_results.json to console report + Pushgateway metrics
 // (Architecture 12.1: pipeline metrics reach Prometheus via Pushgateway)
 //
 // Run after a dbt build (run_results.json lands in <project>/target/):
@@ -54,7 +54,7 @@ import scala.util.Using
 
   val failed = rows.filter(r => r.status == "error" || r.status == "fail")
   if failed.nonEmpty then
-    println(s"✖ ${failed.size} model(s) failed: ${failed.map(_.model).mkString(", ")}")
+    println(s"[FAIL] ${failed.size} model(s) failed: ${failed.map(_.model).mkString(", ")}")
 
   // Optional metrics push — text exposition format, one PUT per job
   sys.env.get("PUSHGATEWAY_URL").foreach { base =>

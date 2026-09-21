@@ -12,7 +12,7 @@ body:
     attributes:
       label: Affected layer
       options:
-        - ingestion (Mongo → Bronze)
+        - ingestion (Mongo to Bronze)
         - transform (Silver/Gold, dbt)
         - quality (GX, custom checks, gate)
         - serving (PostgreSQL publish, dashboard)

@@ -1,7 +1,7 @@
 import streamlit as st
 
 st.set_page_config(page_title="Pipeline Health", layout="wide")
-st.title("🔧 Pipeline Health")
+st.title("Pipeline Health")
 st.caption("Run history, freshness per table, SLA/SLO status, error budget (Architecture 13)")
 
 try:

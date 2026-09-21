@@ -19,6 +19,7 @@ TXN_SCHEMA = StructType(
     [
         StructField("transaction_id", IntegerType(), False),
         StructField("account_id", IntegerType(), True),
+        StructField("txn_date", StringType(), True),
         StructField("txn_type", StringType(), True),
         StructField("amount", DecimalType(18, 2), True),
         StructField("channel", StringType(), True),

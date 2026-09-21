@@ -29,8 +29,10 @@ services:
     container_name: banking_mongo
     restart: unless-stopped
     # keyFile required when auth + replSet: generate ephemeral key for local dev
+    # keyfile lives on the mongo volume (owned by uid 999) so restarts never hit a
+    # root-owned stale /tmp file that the mongodb user cannot overwrite
     command: >
-      bash -c "openssl rand -base64 756 > /tmp/mongo-keyfile && chmod 400 /tmp/mongo-keyfile && chown 999:999 /tmp/mongo-keyfile && exec mongod --replSet rs0 --bind_ip_all --keyFile /tmp/mongo-keyfile"
+      bash -c "if [ ! -f /data/db/mongo-keyfile ]; then openssl rand -base64 756 > /data/db/mongo-keyfile && chmod 400 /data/db/mongo-keyfile && chown 999:999 /data/db/mongo-keyfile; fi; exec mongod --replSet rs0 --bind_ip_all --keyFile /data/db/mongo-keyfile"
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:?set in .env}

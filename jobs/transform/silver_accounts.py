@@ -63,5 +63,6 @@ def run(batch_id: str = None):
         quarantine.withColumn("_dq_rule", F.lit("not_null")).write.mode("append").saveAsTable(
             "banking.quarantine.accounts"
         )
-    logger.info(f"silver_accounts: wrote {clean.count()} clean, {quarantine.count()} quarantine")
-    return clean.count()
+    cnt = clean.count()
+    logger.info(f"silver_accounts: wrote {cnt} clean, {quarantine.count()} quarantine")
+    return cnt

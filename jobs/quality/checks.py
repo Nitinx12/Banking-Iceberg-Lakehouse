@@ -1,6 +1,6 @@
 """jobs/quality/checks.py — custom PySpark checks (Architecture 11.1 layers 4-5).
 
-- debit/credit balance, balance rollforward, Silver→Gold parity, orphan keys
+- debit/credit balance, balance rollforward, Silver->Gold parity, orphan keys
 - statistical: volume z-score vs 14d baseline, null rate drift, amount distribution shift
 Writes to ops.dq_results per Architecture 11.5 and returns dq_score.
 """
@@ -68,6 +68,7 @@ def check_statistical(spark, run_id, batch_id, layer="silver"):
               AND created_at < current_timestamp() - INTERVAL 1 DAY
             """
         ).collect()[0]["daily_avg"]
+        baseline = float(baseline) if baseline is not None else 0.0  # Spark returns Decimal
         volume_ok = True
         if baseline:
             today = spark.sql(
@@ -124,6 +125,7 @@ def check_statistical(spark, run_id, batch_id, layer="silver"):
                   AND created_at < current_timestamp() - INTERVAL 1 DAY
                 """
             ).collect()[0]["a"]
+            base_amt = float(base_amt) if base_amt is not None else None  # Spark returns Decimal
             if base_amt:
                 recent_amt = spark.sql(
                     """
@@ -132,6 +134,7 @@ def check_statistical(spark, run_id, batch_id, layer="silver"):
                     WHERE created_at >= current_timestamp() - INTERVAL 1 DAY
                     """
                 ).collect()[0]["a"]
+                recent_amt = float(recent_amt) if recent_amt is not None else None
                 if recent_amt:
                     shift = abs(recent_amt - base_amt) / base_amt
                     shift_ok = shift < 0.2
@@ -161,7 +164,7 @@ def check_statistical(spark, run_id, batch_id, layer="silver"):
 
 
 def check_gold_reconciliation(spark, run_id, batch_id):
-    """Gold reconciliation: Silver→Gold parity, orphan facts (Architecture 11.1 layer 4)."""
+    """Gold reconciliation: Silver->Gold parity, orphan facts (Architecture 11.1 layer 4)."""
     try:
         gold_cnt = (
             spark.table("banking.gold.dim_customer").count()

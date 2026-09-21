@@ -1,12 +1,19 @@
 # HDFC Banking Data Platform — Lakehouse
 
-> Architecture: `Architecture.md` | Delivery plan: `PROJECT_PLAN.md` | Phase: **4 Serving & Streamlit — MVP complete (Phases 0-4 live-verified)** | Next: Phase 5 Observability hardening
+> Architecture: `Architecture.md` | Delivery plan: `PROJECT_PLAN.md` | Phase: **5 Observability — SLOs, alerts and error budget proven live (Phases 0-4 live-verified)** | Next: Phase 6 IaC/CD
 >
 > Phases 0-4 proven live: Contracts ×10, Bronze watermark/overlap/_batch_id idempotent (rerun = same counts), Silver ×10 (6 Python + 3 Scala heavy), Gold star SCD2 (6/9/20 counts), GX + gate (98% threshold), publish swap idempotent, backfill DAG. Iceberg-everywhere on CE (ADR 003 amended 2026-09-21) — Delta fallback not triggered.
 
 MongoDB (replicaSet `rs0`) → PySpark incremental batch (watermark + overlap, `_batch_id` idempotent) → Iceberg lakehouse (Bronze raw `_doc` + lineage, Silver typed/masked, Gold star SCD2) → PostgreSQL (`banking_dw: serving/ops/rt`) → Streamlit, orchestrated by Airflow, validated by GX/dbt, observed by Prometheus/Grafana.
 
-## Quick start (Phase 4 — MVP live)
+## Quick start (Phase 5 — monitoring live)
+
+Monitoring stack: `docker compose --profile monitoring up -d` — Grafana at
+http://localhost:13000 (dashboards provisioned from `monitoring/grafana/`), Prometheus
+at http://localhost:9090 (SLO rules in `monitoring/prometheus/rules/`), Alertmanager
+at http://localhost:9093. Set `SLACK_WEBHOOK_URL` in `.env` to route alerts to Slack.
+SLO proof drills: `uv run python scripts/proof_slo.py` (forced freshness delay + forced
+critical DQ failure, both reversible). CE Gold build: `uv run python scripts/build_gold.py --publish`.
 
 ```bash
 # 1. env
@@ -54,11 +61,14 @@ banking_data_platform/
 └── sql/init_postgres.sql serving/ops/rt + dq_results/freshness DDL
 ```
 
-## What remains (Phase 5+)
+## What remains (Phase 6+)
 
-- Phase 5: Harden `sla_monitor` (freshness `warn_after 25h / error_after 26h` proven) + 5 Grafana dashboards as code + alert routing per severity. Runbooks below now per-alert (was 5-line stubs).
+- Phase 5 (done): SLOs measured + proven live — forced-delay and forced-DQ-fail drills pass
+  (`scripts/proof_slo.py`), 5 Grafana dashboards provisioned as code, per-alert runbooks,
+  error budget policy in `docs/slo/error-budget-policy.md`, compaction proven on live tables.
 - Phase 6: Terraform modules (`postgres`/`object_storage`/`monitoring` + paid `databricks`) + `cd.yml` promotion. CE verified Iceberg-everywhere; Delta fallback kept only for paid Unity Catalog.
 - Phase 7: Flink CDC (stretch) — `jobs/transform/scala/build.sbt` still missing; `make ingest/silver/gold` sbt targets are wired but expected to fail until Phase 7 scaffold. Python fallback (`make ingest_py`) is the proven CE path.
+- Agent page (06_Agent): data path verified (5 serving tables, grants, guard); LLM calls blocked on OpenAI credits (429 insufficient_quota) — add credits at platform.openai.com billing to enable.
 
 ## Open questions (from PROJECT_PLAN.md:14 — partially closed)
 

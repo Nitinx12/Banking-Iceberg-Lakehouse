@@ -1,0 +1,64 @@
+{
+  "title": "5 - Error Budget (99% / 30d)",
+  "uid": "error-budget",
+  "tags": ["banking", "slo"],
+  "timezone": "browser",
+  "refresh": "5m",
+  "time": { "from": "now-30d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Budget burned % (50% = feature freeze, Arch 13.3)",
+      "type": "gauge",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 100,
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "100 * sum(sla_breach_seconds_total) / (0.01 * 30 * 24 * 3600)", "legendFormat": "burned" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Miss minutes (budget allows 432m / 30d)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "targets": [{ "expr": "sum(sla_breach_seconds_total) / 60" }]
+    },
+    {
+      "id": 3,
+      "title": "Burn rate (2%/h alerts, 1h window)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        { "expr": "sum(increase(sla_breach_total[1h])) / 12", "legendFormat": "budget/h" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Breach minutes by table (30d)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "sum(increase(sla_breach_seconds_total[30d])) by (table)", "legendFormat": "{{table}}" }
+      ]
+    }
+  ]
+}

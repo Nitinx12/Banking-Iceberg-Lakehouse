@@ -74,3 +74,7 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 .env.bak
+
+# scala-cli build artifacts
+.scala-build/
+.bsp/

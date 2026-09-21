@@ -153,26 +153,56 @@ services:
     volumes: ["./gx/uncommitted/data_docs:/usr/share/nginx/html:ro"]
 
   # --- monitoring profile: Prometheus/Grafana/Alertmanager per Architecture 12 ---
+  pushgateway:
+    image: prom/pushgateway:v1.9.0
+    profiles: ["monitoring"]
+    ports: ["19091:9091"]
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    profiles: ["monitoring"]
+    ports: ["8083:8080"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
   prometheus:
     image: prom/prometheus:v2.53.2
     profiles: ["monitoring"]
     ports: ["9090:9090"]
-    volumes: ["./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-lifecycle
 
   grafana:
     image: grafana/grafana:11.1.0
     profiles: ["monitoring"]
-    ports: ["3000:3000"]
+    ports: ["13000:3000"]
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on: [prometheus]
 
   alertmanager:
     image: prom/alertmanager:v0.27.0
     profiles: ["monitoring"]
     ports: ["9093:9093"]
-    volumes: ["./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro"]
+    environment:
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+    volumes: ["./monitoring/alertmanager:/etc/alertmanager:ro"]
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        SLACK_URL="$${SLACK_WEBHOOK_URL}"
+        if [ -z "$$SLACK_URL" ]; then SLACK_URL="http://127.0.0.1:1/hook"; fi
+        sed "s|__SLACK_WEBHOOK_URL__|$$SLACK_URL|g" /etc/alertmanager/alertmanager.yml.tpl > /tmp/alertmanager.yml
+        exec /bin/alertmanager --config.file=/tmp/alertmanager.yml --storage.path=/alertmanager
 
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.15.0

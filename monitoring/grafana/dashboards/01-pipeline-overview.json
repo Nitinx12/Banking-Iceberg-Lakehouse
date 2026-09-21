@@ -1,0 +1,82 @@
+{
+  "title": "1 - Pipeline Overview",
+  "uid": "pipe-overview",
+  "tags": ["banking", "overview"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Freshness per Gold table (SLO 26h = 93600s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 90000 },
+              { "color": "red", "value": 93600 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [{ "expr": "data_freshness_seconds", "legendFormat": "{{table}}" }]
+    },
+    {
+      "id": 2,
+      "title": "SLA breach events (total)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 },
+      "targets": [{ "expr": "sum(sla_breach_total)" }]
+    },
+    {
+      "id": 3,
+      "title": "DQ gate pass rate (%)",
+      "type": "gauge",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 100,
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 98 },
+              { "color": "green", "value": 100 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [{ "expr": "dq_gate_pass_pct" }]
+    },
+    {
+      "id": 4,
+      "title": "Bronze rows ingested per run",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [{ "expr": "sum(rows_written_total) by (collection)", "legendFormat": "{{collection}}" }]
+    },
+    {
+      "id": 5,
+      "title": "Pipeline runs by stage (24h)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "sum(increase(pipeline_runs_total[24h])) by (stage, status)", "legendFormat": "{{stage}} {{status}}" }
+      ]
+    }
+  ]
+}

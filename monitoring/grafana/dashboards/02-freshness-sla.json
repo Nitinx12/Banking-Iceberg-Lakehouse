@@ -1,0 +1,56 @@
+{
+  "title": "2 - Freshness SLA",
+  "uid": "freshness-sla",
+  "tags": ["banking", "freshness"],
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": { "from": "now-48h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Freshness vs 26h SLO (93600s)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 16, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 93600 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "data_freshness_seconds", "legendFormat": "{{table}}" },
+        { "expr": "vector(93600)", "legendFormat": "SLO" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Breach status by table",
+      "type": "table",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "data_freshness_seconds > bool 93600",
+          "format": "table",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "sla_events inserted (per table)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 9 },
+      "targets": [{ "expr": "sum(increase(sla_breach_total[6h])) by (table)", "legendFormat": "{{table}}" }]
+    }
+  ]
+}

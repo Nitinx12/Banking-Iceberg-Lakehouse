@@ -1,0 +1,57 @@
+{
+  "title": "4 - Serving and Consumption",
+  "uid": "serving-consumption",
+  "tags": ["banking", "serving"],
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Published rows per serving table",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
+      "targets": [{ "expr": "serving_rows_total", "legendFormat": "{{table}}" }]
+    },
+    {
+      "id": 2,
+      "title": "Serving freshness (max _loaded_at age)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 16, "x": 8, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 93600 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [{ "expr": "data_freshness_seconds", "legendFormat": "{{table}}" }]
+    },
+    {
+      "id": 3,
+      "title": "Postgres connections (dashboard + agent)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        { "expr": "sum(pg_stat_activity_count) by (state)", "legendFormat": "{{state}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Postgres disk usage (banking_dw)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 6 },
+      "targets": [{ "expr": "pg_database_size_bytes{datname=\"banking_dw\"}", "legendFormat": "size" }]
+    }
+  ]
+}

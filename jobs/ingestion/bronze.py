@@ -297,6 +297,17 @@ def ingest_collection(collection: str, batch_id: str, run_id: str, dry_run: bool
 
     # pipeline_runs metric
     _record_run(run_id, batch_id, f"bronze_{collection}", "success", total_docs, cnt)
+    # Prometheus: rows written per collection (grafana: Bronze rows ingested per run)
+    from jobs.common.metrics import push_metrics
+
+    push_metrics(
+        f"bronze_{collection}",
+        {
+            "rows_written_total": ({"collection": collection}, float(cnt)),
+            "quarantine_rows_total": ({"collection": collection}, float(len(quarantine_rows))),
+        },
+        run_id=run_id,
+    )
     return cnt, max_source_ts
 
 
@@ -380,6 +391,15 @@ def _record_run(run_id, batch_id, stage, status, rows_read, rows_written):
                     "rw": rows_written,
                 },
             )
+        # Prometheus run counter per stage (job name unique per stage so pushes
+        # from different stages do not overwrite each other's series)
+        from jobs.common.metrics import push_metrics
+
+        push_metrics(
+            f"runs_{stage}",
+            {"pipeline_runs_total": ({"stage": stage, "status": status}, 1.0)},
+            run_id=run_id,
+        )
     except Exception as e:
         logger.warning(f"pipeline_runs record failed: {e}")
 

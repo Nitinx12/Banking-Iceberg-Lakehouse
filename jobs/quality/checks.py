@@ -207,6 +207,17 @@ def check_gold_reconciliation(spark, run_id, batch_id):
         dq_gate = float(os.getenv("DQ_GATE_MIN_PASS_PCT", "98.0"))
         gate_pass = score >= dq_gate and orphans == 0
         logger.info(f"gold reconciliation score {score:.1f}% gate {dq_gate}% pass={gate_pass}")
+        # Prometheus: gate pass rate + critical failures (alert CriticalDqFailure)
+        from jobs.common.metrics import push_metrics
+
+        push_metrics(
+            "dq_checks",
+            {
+                "dq_gate_pass_pct": ({}, round(score, 2)),
+                "dq_critical_failures_total": ({}, 0 if orphans == 0 else 1),
+            },
+            run_id=run_id,
+        )
         return gate_pass
     except Exception as e:
         logger.warning(f"reconciliation check skipped (tables not yet materialized): {e}")

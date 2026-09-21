@@ -1,0 +1,49 @@
+groups:
+  - name: data-slo
+    rules:
+      - alert: FreshnessBreachHigh
+        expr: max by (table) (data_freshness_seconds) > 93600
+        for: 5m
+        labels:
+          severity: high
+        annotations:
+          summary: "freshness breach on {{ $labels.table }}: {{ $value | humanizeDuration }} > 26h SLO"
+          runbook: "docs/runbooks/alert-freshness.md"
+
+      - alert: FreshnessBreachCritical
+        expr: max by (table) (data_freshness_seconds) > 129600
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "freshness critical on {{ $labels.table }}: {{ $value | humanizeDuration }} > 36h"
+          runbook: "docs/runbooks/alert-freshness.md"
+
+      - alert: DagRunFailed
+        expr: increase(airflow_task_failures_total[15m]) > 0
+        for: 0m
+        labels:
+          severity: high
+        annotations:
+          summary: "Airflow task failure in the last 15m"
+          runbook: "docs/runbooks/alert-dag-failure.md"
+
+      - alert: CriticalDqFailure
+        expr: dq_critical_failures_total > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "critical DQ check failed - gate holds"
+          runbook: "docs/runbooks/alert-dq-critical.md"
+
+      - alert: ErrorBudgetBurnFast
+        # 30d budget = 432 breach-minutes (Arch 13.3); 2% of that is ~8.6m. More
+        # than one breach event within an hour means we are burning fast.
+        expr: sum(increase(sla_breach_total[1h])) > 1
+        for: 15m
+        labels:
+          severity: high
+        annotations:
+          summary: "error budget burning fast (>2%/h of 30d budget)"
+          runbook: "docs/runbooks/alert-budget-burn.md"

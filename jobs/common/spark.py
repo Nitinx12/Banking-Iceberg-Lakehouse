@@ -44,6 +44,9 @@ def get_spark(app_name="banking_bronze") -> SparkSession:
             f"spark.sql.catalog.{cfg.ICEBERG_CATALOG_NAME}.jdbc.password",
             cfg.env("POSTGRES_PASSWORD", ""),
         )
+        # JDBC catalog without view support blocks CREATE OR REPLACE TABLE / temp views on
+        # pre-existing namespaces (UnsupportedOperationException: jdbc.schema-version=V1)
+        .config(f"spark.sql.catalog.{cfg.ICEBERG_CATALOG_NAME}.jdbc.schema-version", "V1")
         # S3A / MinIO - for host runs S3_ENDPOINT must be localhost:9000 (not minio:9000)
         .config("spark.hadoop.fs.s3a.endpoint", cfg.S3_ENDPOINT)
         .config("spark.hadoop.fs.s3a.access.key", cfg.AWS_ACCESS_KEY_ID)

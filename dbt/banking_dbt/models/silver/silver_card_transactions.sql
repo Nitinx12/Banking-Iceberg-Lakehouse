@@ -5,6 +5,7 @@ select
   json_extract_scalar(_doc, '$.card_id') as card_id,
   json_extract_scalar(_doc, '$.amount') as amount,
   json_extract_scalar(_doc, '$.is_fraud') as is_fraud,
+  json_extract_scalar(_doc, '$.txn_date') as txn_date,
   _ingested_at as silver_loaded_at,
   _batch_id as _bronze_batch_id,
   _doc_hash as _bronze_doc_hash

@@ -4,6 +4,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.types import (
     DecimalType,
     IntegerType,
+    StringType,
     StructField,
     StructType,
     TimestampType,
@@ -19,6 +20,7 @@ SCHEMA = StructType(
         StructField("card_id", IntegerType(), True),
         StructField("amount", DecimalType(18, 2), True),
         StructField("is_fraud", IntegerType(), True),
+        StructField("txn_date", StringType(), True),
         StructField("created_at", TimestampType(), True),
     ]
 )

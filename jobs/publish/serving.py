@@ -19,6 +19,7 @@ SERVING_KEYS = {
     "dim_account": ["account_id"],
     "dim_branch": ["branch_id"],
     "fct_transactions": ["transaction_id"],
+    "fct_card_transactions": ["card_txn_id"],
 }
 
 
@@ -60,14 +61,12 @@ def publish(table: str, run_id: str):
         pg_url = _pg_url()
         # credential-free JDBC URL — credentials go in the user/password options below,
         # a raw password inside the URL breaks parsing on special characters
-        _user, _pw, jdbc_host, jdbc_port, jdbc_db = _pg_creds()
+        jdbc_host, jdbc_port, jdbc_db = _pg_creds()[2:]
         pg_jdbc_url = f"jdbc:postgresql://{jdbc_host}:{jdbc_port}/{jdbc_db}"
         eng = create_engine(pg_url, pool_pre_ping=True)
 
-        is_fact = table.startswith("fct_")
         staging = f"serving.{table}_stg"
         target = f"serving.{table}"
-
         with eng.begin() as c:
             # schema ownership belongs to sql/init_postgres.sql; the app role only verifies
             # (CREATE SCHEMA IF NOT EXISTS needs database-level CREATE, which etl_writer lacks)
@@ -98,47 +97,38 @@ def publish(table: str, run_id: str):
             if stg_cnt != cnt:
                 raise RuntimeError(f"publish {table}: staging count {stg_cnt} != gold count {cnt}")
 
-            if is_fact:
-                # incremental upsert by primary key (idempotent across reruns).
-                # Column discovery must run in THIS transaction — a separate inspector
-                # connection cannot see the table created below.
-                c.execute(
-                    text(f"CREATE TABLE IF NOT EXISTS {target} (LIKE {staging} INCLUDING ALL)")
+            # both facts and dims upsert by primary key. The classic dim rename-swap
+            # (ALTER TABLE ... RENAME + DROP old) is view-unsafe: Postgres views bind the
+            # table OID and follow the rename, so dropping the old table fails with
+            # DependentObjectsStillExist while serving.customers_masked exists.
+            c.execute(text(f"CREATE TABLE IF NOT EXISTS {target} (LIKE {staging} INCLUDING ALL)"))
+            c.execute(
+                text(
+                    f"CREATE UNIQUE INDEX IF NOT EXISTS {table}_pk ON {target} ({', '.join(key_cols)})"
                 )
-                c.execute(
+            )
+            # Column discovery must run in THIS transaction — a separate inspector
+            # connection cannot see the table created above.
+            cols = [
+                r[0]
+                for r in c.execute(
                     text(
-                        f"CREATE UNIQUE INDEX IF NOT EXISTS {table}_pk ON {target} ({', '.join(key_cols)})"
-                    )
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema = 'serving' AND table_name = :t "
+                        "ORDER BY ordinal_position"
+                    ),
+                    {"t": table},
+                ).fetchall()
+            ]
+            key_list = ", ".join(key_cols)
+            update_set = ", ".join(f"{col} = EXCLUDED.{col}" for col in cols if col not in key_cols)
+            c.execute(
+                text(
+                    f"INSERT INTO {target} SELECT * FROM {staging} "
+                    f"ON CONFLICT ({key_list}) DO UPDATE SET {update_set}"
                 )
-                cols = [
-                    r[0]
-                    for r in c.execute(
-                        text(
-                            "SELECT column_name FROM information_schema.columns "
-                            "WHERE table_schema = 'serving' AND table_name = :t "
-                            "ORDER BY ordinal_position"
-                        ),
-                        {"t": table},
-                    ).fetchall()
-                ]
-                key_list = ", ".join(key_cols)
-                update_set = ", ".join(
-                    f"{col} = EXCLUDED.{col}" for col in cols if col not in key_cols
-                )
-                c.execute(
-                    text(
-                        f"INSERT INTO {target} SELECT * FROM {staging} "
-                        f"ON CONFLICT ({key_list}) DO UPDATE SET {update_set}"
-                    )
-                )
-                c.execute(text(f"DROP TABLE IF EXISTS {staging}"))
-            else:
-                # small dims: transactional rename swap; guard for a first-run target
-                target_old = f"{target}_old"
-                c.execute(text(f"DROP TABLE IF EXISTS {target_old}"))
-                c.execute(text(f"ALTER TABLE IF EXISTS {target} RENAME TO {table}_old"))
-                c.execute(text(f"ALTER TABLE {staging} RENAME TO {table}"))
-                c.execute(text(f"DROP TABLE IF EXISTS {target_old}"))
+            )
+            c.execute(text(f"DROP TABLE IF EXISTS {staging}"))
 
             c.execute(text(f"ANALYZE {target}"))
             c.execute(
@@ -159,7 +149,21 @@ def publish(table: str, run_id: str):
                     "rr": cnt,
                     "rw": stg_cnt,
                 },
-            )
+            )  # readers (streamlit_reader, the Gold agent) always see published tables —
+            # publish may create a table the init grants ran before
+            c.execute(text(f"GRANT SELECT ON {target} TO streamlit_reader"))
+
+        # Prometheus: published rows + freshness 0 (just written) per table
+        from jobs.common.metrics import push_metrics
+
+        push_metrics(
+            f"publish_{table}",
+            {
+                "serving_rows_total": ({"table": table}, float(stg_cnt)),
+                "data_freshness_seconds": ({"table": table}, 0.0),
+            },
+            run_id=run_id,
+        )
 
         logger.info(f"publish {table} done run {run_id} cnt {cnt}")
         return cnt

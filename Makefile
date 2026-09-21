@@ -1,10 +1,15 @@
-# Banking Data Platform — Makefile (Architecture 16.1)
+# Banking Data Platform - Makefile (Architecture 16.1)
 # Heavy data tasks (Bronze/Silver/Gold) run Scala via sbt (Architecture 7.1: JVM shuffle for
 # 2M+ row tables). Quick monitoring/ops tasks run shell wrappers in scripts/sh/.
 # Windows alternative: tasks.bat <target>
 
 UV ?= uv
 PY ?= $(UV) run python
+# direct (non-make) uv runs read this too - see .envrc / README
+export UV_PROJECT_ENVIRONMENT
+ifeq ($(UNAME),Linux)
+export UV_PROJECT_ENVIRONMENT ?= .venv-linux
+endif
 RUF ?= $(UV) run ruff
 
 ENV ?= dev
@@ -21,7 +26,7 @@ endif
 
 SBT ?= sbt
 SBT_PROJECT := jobs.transform.scala
-# unquoted — recipe lines wrap this in their own quoting; nested quotes break /bin/sh
+# unquoted - recipe lines wrap this in their own quoting; nested quotes break /bin/sh
 HEAVY_NOTE := requires sbt + jobs/transform/scala/build.sbt (Phase 7) - Python fallback: make ingest_py
 
 .PHONY: help env setup hooks up down status health lint test test_fast \
@@ -29,18 +34,18 @@ HEAVY_NOTE := requires sbt + jobs/transform/scala/build.sbt (Phase 7) - Python f
         dashboard tf_plan tf_apply seed_mongo docs clean jars
 
 help:
-	@echo "Banking Data Platform — make targets"
+	@echo "Banking Data Platform - make targets"
 	@echo ""
-	@echo "JARS (stable/offline — Architecture 6.1/16.1):"
+	@echo "JARS (stable/offline - Architecture 6.1/16.1):"
 	@echo "  make jars               - download pinned Spark/Iceberg JARs to jars/ for stable offline runs (needs curl, optional sbt)"
 	@echo ""
-	@echo "HEAVY (Scala via sbt — Architecture 7.1):"
+	@echo "HEAVY (Scala via sbt - Architecture 7.1):"
 	@echo "  make ingest             - Bronze batch ingestion (sbt runMain jobs.ingestion.scala.BronzeIngestion)"
 	@echo "  make ingest_py          - Bronze via Python fallback (jobs.ingestion.bronze)"
 	@echo "  make silver             - Silver for the 3 heavy tables (Scala: customers/transactions/card_txns)"
 	@echo "  make gold               - Gold star-schema build (Scala)"
 	@echo ""
-	@echo "QUICK MONITORING (shell — scripts/sh/):"
+	@echo "QUICK MONITORING (shell - scripts/sh/):"
 	@echo "  make health             - service healthcheck (mongo/postgres/minio/airflow)"
 	@echo "  make status             - pipeline run status + watermark from ops tables"
 	@echo "  make monitor            - dbt run_results.json report + Pushgateway metrics"
@@ -68,12 +73,12 @@ help:
 	@echo "  make clean              - remove caches"
 
 env:
-	@if [ ! -f .env ]; then cp .env.example .env; echo "created .env from .env.example — EDIT secrets"; else echo ".env exists"; fi
+	@if [ ! -f .env ]; then cp .env.example .env; echo "created .env from .env.example - EDIT secrets"; else echo ".env exists"; fi
 
 setup: env
 	$(UV) sync --group dev --group ingestion --group transform --group quality --group dashboard
 	git config core.hooksPath .githooks
-	@echo "setup done — run: make up PROFILE=core"
+	@echo "setup done - run: make up PROFILE=core"
 
 hooks:
 	git config core.hooksPath .githooks
@@ -97,7 +102,7 @@ status:
 	@echo "== ops.pipeline_runs (latest 5) =="
 	docker exec $$(docker ps --filter name=banking_postgres -q | head -1) psql -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_WAREHOUSE_DB:-banking_dw} -c \
 	  "select run_id, stage, status, rows_written, finished_at from ops.pipeline_runs order by started_at desc limit 5" 2>/dev/null \
-	  || echo "postgres not reachable — make up first"
+	  || echo "postgres not reachable - make up first"
 	@echo "== watermarks =="
 	docker exec $$(docker ps --filter name=banking_postgres -q | head -1) psql -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_WAREHOUSE_DB:-banking_dw} -c \
 	  "select collection, watermark_value, updated_at from ops.watermarks order by collection" 2>/dev/null || true
@@ -106,7 +111,7 @@ monitor:
 	@# dbt run_results.json -> console report + Pushgateway (Architecture 12.1)
 	@if [ -f dbt/banking_dbt/target/run_results.json ]; then \
 	  scala-cli run dbt/monitor/dbt-report.scala -- dbt/banking_dbt/target/run_results.json; \
-	else echo "no run_results.json yet — run make dbt_build first"; fi
+	else echo "no run_results.json yet - run make dbt_build first"; fi
 
 # ---------------------------------------------------------------- heavy tasks (Scala)
 
@@ -115,7 +120,7 @@ ingest:
 	$(SBT) ";project $(SBT_PROJECT);runMain jobs.ingestion.scala.BronzeIngestion"
 
 ingest_py:
-	@# Python fallback — proven CE path (Spark local mode), same idempotency contract
+	@# Python fallback - proven CE path (Spark local mode), same idempotency contract
 	bash scripts/sh/run_ingestion.sh $(if $(BATCH_ID),--batch-id $(BATCH_ID),) \
 	  || $(PY) -m jobs.ingestion.bronze --all
 
@@ -179,7 +184,7 @@ tf_apply:
 	terraform -chdir=terraform/envs/$(ENV) apply -input=false
 
 seed_mongo:
-	@echo "Seeding Mongo — requires compose core up"
+	@echo "Seeding Mongo - requires compose core up"
 	$(PY) scripts/seed_mongo.py
 
 docs:

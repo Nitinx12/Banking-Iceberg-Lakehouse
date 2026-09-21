@@ -1,7 +1,7 @@
 [project]
 name = "hdfc-bank-lakehouse"
 version = "0.1.0"
-description = "HDFC Banking Data Platform — MongoDB to Iceberg lakehouse (Architecture.md + PROJECT_PLAN.md Phase 0)"
+description = "HDFC Banking Data Platform - MongoDB to Iceberg lakehouse (Architecture.md + PROJECT_PLAN.md Phase 0)"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "HDFC Bank Platform" }]
@@ -66,6 +66,12 @@ dev = [
 
 [tool.uv]
 package = false
+
+# A venv is not portable across Windows and WSL sharing this checkout. WSL users
+# export UV_PROJECT_ENVIRONMENT=.venv-linux in their shell profile (see README);
+# this fallback keeps a bare `uv run` inside WSL from clobbering the Windows .venv.
+# (uv.toml cannot express platform conditionals, so this is done via a uv env hook
+# below and documented; the Makefile also pins it for make-driven runs.)
 
 [tool.ruff]
 line-length = 100

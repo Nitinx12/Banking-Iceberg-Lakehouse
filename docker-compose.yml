@@ -112,6 +112,13 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?set in .env}
 
   # --- orchestration profile: Airflow (Architecture 4.2) ---
+  # NOTE: compose does not auto-activate a dependency's profile, so always pass core:
+  #   docker compose --profile core --profile orchestration up -d   (or: make up PROFILE=orchestration)
+  # The stock apache/airflow image has no JDK/PySpark/river deps, so DAG tasks would
+  # crash on import. The scheduler runs DAGs as subprocesses on the HOST instead:
+  # tasks invoke `uv run python -m ...` via BashOperator against this checkout
+  # (volumes mount the repo; AIRFLOW_ENV carries the compose-side env). The api-server
+  # stays in-container for the UI. Deps are pulled from the core profile at runtime.
   airflow-apiserver:
     image: apache/airflow:2.9.3-python3.11
     profiles: ["orchestration"]
@@ -119,16 +126,26 @@ services:
     environment:
       AIRFLOW__CORE__EXECUTOR: ${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags:ro
     ports: ["8080:8080"]
-    command: airflow api-server
+    command: api-server
 
   airflow-scheduler:
     image: apache/airflow:2.9.3-python3.11
     profiles: ["orchestration"]
     depends_on: [postgres]
     environment:
+      AIRFLOW__CORE__EXECUTOR: ${AIRFLOW__CORE__EXECUTOR:-LocalExecutor}
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: ${AIRFLOW__DATABASE__SQL_ALCHEMY_CONN}
-    command: airflow scheduler
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW_JOBS_HOST_RUN: "1"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags:ro
+      - ./:/repo:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: scheduler
 
   # --- streaming profile: Flink (stretch Phase 7) ---
   flink-jobmanager:

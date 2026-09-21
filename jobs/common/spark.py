@@ -60,8 +60,12 @@ def get_spark(app_name="banking_bronze") -> SparkSession:
             "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider",
         )
         .config("spark.hadoop.aws.region", cfg.S3_REGION)
-        # Bronze partitioning default (Architecture 6.4)
+        # Bronze partitioning default (Architecture 6.4). Adaptive AQE coalesces the
+        # 16 shuffle partitions down for small local data, so dev runs are fast while
+        # prod-scale runs still get real parallelism.
         .config("spark.sql.adaptive.enabled", "true")
+        .config("spark.sql.adaptive.coalescePartitions.enabled", "true")
+        .config("spark.sql.adaptive.advisoryPartitionSizeInBytes", "64m")
         .config("spark.sql.shuffle.partitions", cfg.env("SPARK_SHUFFLE_PARTITIONS", "16"))
         # Windows: Spark workers must use venv python, not Store stub "python"
         .config("spark.pyspark.python", sys.executable)

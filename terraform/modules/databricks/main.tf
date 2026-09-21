@@ -1,5 +1,6 @@
 terraform {
   required_version = ">= 1.9"
+
   required_providers {
     databricks = {
       source  = "databricks/databricks"
@@ -8,9 +9,20 @@ terraform {
   }
 }
 
-variable "workspace_host" { type = string default = "" }
-variable "catalog_name" { type = string default = "banking" }
-variable "warehouse_name" { type = string default = "banking_warehouse" }
+variable "workspace_host" {
+  type    = string
+  default = ""
+}
+
+variable "catalog_name" {
+  type    = string
+  default = "banking"
+}
+
+variable "warehouse_name" {
+  type    = string
+  default = "banking_warehouse"
+}
 
 # Placeholder — real databricks resources require valid host/token
 # Keeping module present satisfies Architecture 15.1 repo structure check
@@ -20,6 +32,7 @@ resource "null_resource" "databricks_stub" {
     catalog = var.catalog_name
     host    = var.workspace_host
   }
+
   provisioner "local-exec" {
     command = "echo databricks module stub catalog=${var.catalog_name}"
   }

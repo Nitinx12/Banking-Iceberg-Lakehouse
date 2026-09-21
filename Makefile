@@ -80,8 +80,10 @@ hooks:
 	@echo "hooks enabled (.githooks)"
 
 up:
-	docker compose --profile $(or $(PROFILE),core) up -d
-	@echo "up --profile $(or $(PROFILE),core) done; check: make health"
+	@# orchestration/streaming/monitoring need core services; always include core so
+	@# `make up PROFILE=orchestration` does not fail on unresolved depends_on
+	docker compose --profile core --profile $(or $(PROFILE),core) up -d
+	@echo "up --profile core+$(or $(PROFILE),core) done; check: make health"
 
 down:
 	docker compose down
@@ -120,6 +122,14 @@ ingest_py:
 silver_py:
 	@# all 10 Python Silver jobs in one Spark session (CE fallback for make silver)
 	$(PY) scripts/silver_all.py
+
+run_all:
+	@# full pipeline (seed->bronze->silver->gold->publish->dq) in ONE Spark process
+	@# - single JVM startup instead of five; --skip-seed to reuse current Mongo data
+	$(PY) scripts/run_pipeline.py --skip-seed
+
+run_all_seed:
+	$(PY) scripts/run_pipeline.py
 
 silver:
 	@echo "Silver (3 heavy tables) via Scala - $(HEAVY_NOTE)"

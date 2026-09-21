@@ -1,26 +1,55 @@
 terraform {
   required_version = ">= 1.9"
-  required_providers { aws = { source = "hashicorp/aws", version = "~> 5.0" } }
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
 }
-variable "bucket_name" { type = string default = "banking-lakehouse" }
-variable "env" { type = string default = "dev" }
+
+variable "bucket_name" {
+  type    = string
+  default = "banking-lakehouse"
+}
+
+variable "env" {
+  type    = string
+  default = "dev"
+}
 
 resource "aws_s3_bucket" "warehouse" {
   bucket = "${var.bucket_name}-${var.env}"
 }
+
 resource "aws_s3_bucket_versioning" "warehouse" {
   bucket = aws_s3_bucket.warehouse.id
-  versioning_configuration { status = "Enabled" }
+
+  versioning_configuration {
+    status = "Enabled"
+  }
 }
+
 resource "aws_s3_bucket_lifecycle_configuration" "warehouse" {
   bucket = aws_s3_bucket.warehouse.id
+
   rule {
     id     = "expire_noncurrent"
     status = "Enabled"
-    noncurrent_version_expiration { noncurrent_days = 30 }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
   }
 }
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "warehouse" {
   bucket = aws_s3_bucket.warehouse.id
-  rule { apply_server_side_encryption_by_default { sse_algorithm = "AES256" } }
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
 }

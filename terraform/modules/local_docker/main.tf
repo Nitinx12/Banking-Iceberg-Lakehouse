@@ -8,11 +8,15 @@ terraform {
   }
 }
 
-variable "env" { type = string default = "local" }
+variable "env" {
+  type    = string
+  default = "local"
+}
 
 resource "null_resource" "local_docker_stub" {
   triggers = { env = var.env }
+
   provisioner "local-exec" {
-    command = "echo local_docker module env=${var.env} — optional Docker provider per Architecture 15.2"
+    command = "echo local_docker module env=${var.env} - optional Docker provider per Architecture 15.2"
   }
 }

@@ -1,5 +1,6 @@
 terraform {
   required_version = ">= 1.9"
+
   required_providers {
     grafana = {
       source  = "grafana/grafana"
@@ -7,10 +8,23 @@ terraform {
     }
   }
 }
-variable "env" { type = string default = "dev" }
-variable "grafana_url" { type = string default = "http://grafana:3000" }
-# Grafana folders + alert contact points per Architecture 12.3 — minimal contacts; dashboards in monitoring/grafana/dashboards
+
+variable "env" {
+  type    = string
+  default = "dev"
+}
+
+variable "grafana_url" {
+  type    = string
+  default = "http://grafana:3000"
+}
+
+# Grafana folders + alert contact points per Architecture 12.3 — minimal contacts;
+# dashboards live in monitoring/grafana/dashboards as code
 resource "null_resource" "monitoring_stub" {
   triggers = { env = var.env }
-  provisioner "local-exec" { command = "echo monitoring ${var.env} provisioned grafana ${var.grafana_url}" }
+
+  provisioner "local-exec" {
+    command = "echo monitoring ${var.env} provisioned grafana ${var.grafana_url}"
+  }
 }

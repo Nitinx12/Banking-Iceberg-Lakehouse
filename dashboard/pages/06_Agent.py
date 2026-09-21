@@ -73,12 +73,18 @@ q = st.text_input(
 
 run = st.button("Ask", type="primary", disabled=not q.strip())
 
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _cached_ask(question: str) -> dict:
+    from agents.graph import ask
+
+    return ask(question)
+
+
 if run and q.strip():
     with st.spinner("Generating SQL -> executing on serving.* -> synthesizing..."):
         try:
-            from agents.graph import ask
-
-            result = ask(q.strip())
+            result = _cached_ask(q.strip())
         except Exception as e:
             st.error(f"Agent failed: {e}")
             st.stop()

@@ -92,9 +92,20 @@ object SilverCustomers {
   }
 
   def main(args: Array[String]): Unit = {
+    var runId: Option[String] = None; var batchId: Option[String] = None; var env = "local"
+    var i = 0; while (i < args.length) { args(i) match {
+      case "--run-id" if i+1 < args.length => runId = Some(args(i+1)); i+=2
+      case "--batch-id" if i+1 < args.length => batchId = Some(args(i+1)); i+=2
+      case "--env" if i+1 < args.length => env = args(i+1); i+=2
+      case other if batchId.isEmpty && !other.startsWith("--") => batchId = Some(other); i+=1
+      case _ => i+=1
+    }}
     val spark = SparkSession.builder.appName("silver_customers_scala").getOrCreate()
-    val batchId = if (args.nonEmpty) Some(args(0)) else None
-    println(s"wrote ${run(spark, batchId)} rows")
+    val t0 = System.nanoTime(); val cnt = run(spark, batchId)
+    val ms = (System.nanoTime() - t0) / 1e6
+    val summary = s"""{"run_id":"${runId.getOrElse("")}","batch_id":"${batchId.getOrElse("")}","env":"$env","stage":"silver_customers_scala","rows_written":$cnt,"duration_ms":${ms.toLong}}"""
+    println(summary)
+    runId.foreach { rid => try { PipelineMetrics.pushRun(rid, batchId.getOrElse(rid), "silver_customers_scala", "success", cnt, ms.toLong) } catch { case _: Throwable => () } }
     spark.stop()
   }
 }

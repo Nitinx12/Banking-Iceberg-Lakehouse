@@ -66,6 +66,10 @@ dev = [
 
 [tool.uv]
 package = false
+# uv run / uv sync without --group should include the groups that main.py needs
+# so `uv run main.py` works frozen without reinstalling 33 -> 164 packages.
+# Agents is excluded (heavy, not needed for pipeline).
+default-groups = ["ingestion", "transform", "quality", "dashboard", "dev"]
 
 # A venv is not portable across Windows and WSL sharing this checkout. WSL users
 # export UV_PROJECT_ENVIRONMENT=.venv-linux in their shell profile (see README);

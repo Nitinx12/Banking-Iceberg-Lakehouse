@@ -1,14 +1,17 @@
 """main.py - Banking Data Platform pipeline entrypoint (project root).
 
-Runs the full chain in the correct order with ONE Spark session:
-    seed -> bronze -> silver -> gold -> publish -> dq
-and prints a rich summary table + timing at the end.
+Runs the full chain in the correct order with ONE Spark session (Architecture 3.2):
+    seed -> bronze -> silver -> gold -> dq (gate) -> publish
+
+dq is fail-closed: if the gate fails, Gold is held and publish is skipped (Architecture 11.1-11.3).
+This reuses a single SparkSession across bronze/silver/gold/dq/publish so we pay one
+JVM startup instead of ~26s per stage (see scripts/run_pipeline.py).
 
 Usage:
     uv run python main.py                 # full run, reusing current Mongo data
     uv run python main.py --seed          # reseed Mongo first
-    uv run python main.py --till silver   # stop after a stage
-    uv run python main.py --no-publish    # skip serving publish
+    uv run python main.py --till gold     # stop after a stage
+    uv run python main.py --no-publish    # run dq but skip serving publish
 """
 
 from __future__ import annotations
@@ -27,7 +30,8 @@ from rich.table import Table  # noqa: E402
 
 console = Console()
 
-STAGES = ["seed", "bronze", "silver", "gold", "publish", "dq"]
+# fail-closed order: dq gates publish (Architecture 3.2)
+STAGES = ["seed", "bronze", "silver", "gold", "dq", "publish"]
 PUBLISH_ORDER = [
     "dim_branch",
     "dim_customer",
@@ -76,17 +80,17 @@ def run_gold(spark) -> dict[str, int]:
     return {t: spark.table(f"banking.gold.{t}").count() for t in BUILD_ORDER}
 
 
-def run_publish(run_id: str) -> dict[str, int]:
-    from jobs.publish.serving import publish  # noqa: PLC0415
-
-    return {t: publish(t, run_id=run_id) for t in PUBLISH_ORDER}
-
-
 def run_dq(spark, run_id: str) -> bool:
     from jobs.quality.checks import check_gold_reconciliation, check_statistical  # noqa: PLC0415
 
     ok = check_statistical(spark, run_id, "n/a")
     return check_gold_reconciliation(spark, run_id, "n/a") and ok
+
+
+def run_publish(run_id: str) -> dict[str, int]:
+    from jobs.publish.serving import publish  # noqa: PLC0415
+
+    return {t: publish(t, run_id=run_id) for t in PUBLISH_ORDER}
 
 
 def summary(results: list[tuple[str, str, float]], wall: float, failed: str | None) -> None:
@@ -114,7 +118,7 @@ def summary(results: list[tuple[str, str, float]], wall: float, failed: str | No
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the banking pipeline end to end")
     parser.add_argument("--seed", action="store_true", help="reseed Mongo first")
-    parser.add_argument("--till", choices=STAGES, default="dq", help="stop after this stage")
+    parser.add_argument("--till", choices=STAGES, default="publish", help="stop after this stage")
     parser.add_argument("--no-publish", action="store_true", help="skip serving publish")
     args = parser.parse_args()
 
@@ -126,6 +130,7 @@ def main() -> int:
     console.print(Rule(f"[bold cyan]Banking Data Platform - run {run_id}"))
     stages_to_run = STAGES[: STAGES.index(args.till) + 1]
 
+    # one Spark session for bronze->publish (scripts/run_pipeline.py pattern)
     spark = None
     try:
         for stage in stages_to_run:
@@ -133,22 +138,29 @@ def main() -> int:
             console.print(f"[bold]>> {stage}", highlight=False)
             detail = ""
             if stage == "seed":
+                if not args.seed:
+                    console.print("[dim]skipped (pass --seed to reseed)", highlight=False)
+                    continue
                 detail = run_seed()
             elif stage == "bronze":
+                # ensure Spark exists before bronze (getOrCreate reused by ingest)
+                if spark is None:
+                    from jobs.common.spark import get_spark  # noqa: PLC0415
+
+                    spark = get_spark(f"main_{run_id}")
                 detail = run_bronze(run_id)
             elif stage == "silver":
+                if spark is None:
+                    from jobs.common.spark import get_spark  # noqa: PLC0415
+
+                    spark = get_spark(f"main_{run_id}")
                 detail = run_silver()
             elif stage == "gold":
-                from jobs.common.spark import get_spark  # noqa: PLC0415
+                if spark is None:
+                    from jobs.common.spark import get_spark  # noqa: PLC0415
 
-                spark = get_spark(f"main_{run_id}")
+                    spark = get_spark(f"main_{run_id}")
                 counts = run_gold(spark)
-                detail = ", ".join(f"{t}={n}" for t, n in counts.items())
-            elif stage == "publish":
-                if args.no_publish:
-                    console.print("[dim]skipped (--no-publish)", highlight=False)
-                    continue
-                counts = run_publish(run_id)
                 detail = ", ".join(f"{t}={n}" for t, n in counts.items())
             elif stage == "dq":
                 if spark is None:
@@ -156,16 +168,32 @@ def main() -> int:
 
                     spark = get_spark(f"main_{run_id}")
                 ok = run_dq(spark, run_id)
-                detail = "gate passed" if ok else "GATE FAILED"
+                detail = "gate passed" if ok else "GATE FAILED — Gold held, publish skipped"
+                results.append((stage, detail, time.time() - t_stage))
+                console.print(
+                    f"   [{'green' if ok else 'red'}]{detail}[/{'green' if ok else 'red'}]",
+                    highlight=False,
+                )
                 if not ok:
-                    results.append((stage, detail, time.time() - t_stage))
                     failed = stage
                     break
+                continue
+            elif stage == "publish":
+                if args.no_publish:
+                    console.print("[dim]skipped (--no-publish)", highlight=False)
+                    continue
+                if failed is not None:
+                    console.print("[dim]skipped (dq gate failed)", highlight=False)
+                    continue
+                # dq stage may have been skipped via --till publish but --no-publish not set;
+                # still ensure gate was evaluated if dq is in the run
+                counts = run_publish(run_id)
+                detail = ", ".join(f"{t}={n}" for t, n in counts.items())
             results.append((stage, detail, time.time() - t_stage))
             console.print(f"   [green]{detail}[/green]", highlight=False)
     except Exception:
         failed = "exception"
-        console.print_exception(short=True)
+        console.print_exception(show_locals=False)
     finally:
         summary(results, time.time() - t0, failed)
 

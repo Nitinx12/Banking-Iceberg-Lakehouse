@@ -63,9 +63,23 @@ object SilverTransactions {
   }
 
   def main(args: Array[String]): Unit = {
+    // Architecture 7.1 contract: --run-id <id> --batch-id <id> --env <local|dev|...>
+    var runId: Option[String] = None; var batchId: Option[String] = None; var env = "local"
+    var i = 0; while (i < args.length) { args(i) match {
+      case "--run-id" if i+1 < args.length => runId = Some(args(i+1)); i+=2
+      case "--batch-id" if i+1 < args.length => batchId = Some(args(i+1)); i+=2
+      case "--env" if i+1 < args.length => env = args(i+1); i+=2
+      case other if batchId.isEmpty && !other.startsWith("--") => batchId = Some(other); i+=1
+      case _ => i+=1
+    }}
     val spark = SparkSession.builder.appName("silver_txn_scala").getOrCreate()
-    val batchId = if (args.nonEmpty) Some(args(0)) else None
-    println(s"wrote ${run(spark, batchId)} rows")
+    val t0 = System.nanoTime()
+    val cnt = run(spark, batchId)
+    val ms = (System.nanoTime() - t0) / 1e6
+    // emit JSON summary and ops.pipeline_runs row — same contract as PySpark jobs (Architecture 12.1)
+    val summary = s"""{"run_id":"${runId.getOrElse("")}","batch_id":"${batchId.getOrElse("")}","env":"$env","stage":"silver_transactions_scala","rows_written":$cnt,"duration_ms":${ms.toLong}}"""
+    println(summary)
+    runId.foreach { rid => try { PipelineMetrics.pushRun(rid, batchId.getOrElse(rid), "silver_transactions_scala", "success", cnt, ms.toLong) } catch { case _: Throwable => () } }
     spark.stop()
   }
 }

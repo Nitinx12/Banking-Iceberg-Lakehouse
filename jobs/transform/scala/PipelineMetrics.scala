@@ -51,4 +51,23 @@ object PipelineMetrics {
   // pipeline_runs_total — feeds "Pipeline runs by stage (24h)"
   def pushPipelineRun(stage: String, status: String, runId: String = ""): Boolean =
     push("pipeline", Map("pipeline_runs_total" -> Seq(Map("stage" -> stage, "status" -> status) -> 1.0)), runId)
+
+  // ops.pipeline_runs row — same contract as PySpark _record_run (bronze.py:366)
+  // Best-effort JDBC insert; never fails the data run if DB is down.
+  def pushRun(runId: String, batchId: String, stage: String, status: String, rowsWritten: Long, durationMs: Long): Boolean = {
+    try {
+      val url = s"jdbc:postgresql://${sys.env.getOrElse("POSTGRES_HOST","postgres")}:${sys.env.getOrElse("POSTGRES_PORT","5432")}/${sys.env.getOrElse("POSTGRES_WAREHOUSE_DB","banking_dw")}"
+      val user = sys.env.getOrElse("POSTGRES_USER","postgres")
+      val pw = sys.env.getOrElse("POSTGRES_PASSWORD","")
+      val conn = java.sql.DriverManager.getConnection(url, user, pw)
+      try {
+        val ps = conn.prepareStatement(
+          "INSERT INTO ops.pipeline_runs (run_id,batch_id,stage,status,rows_written,duration_ms,started_at,finished_at) VALUES (?,?,?,?,?,?, now(), now()) ON CONFLICT (run_id,stage) DO UPDATE SET batch_id=EXCLUDED.batch_id, status=EXCLUDED.status, rows_written=EXCLUDED.rows_written, duration_ms=EXCLUDED.duration_ms, finished_at=now()")
+        ps.setString(1, runId); ps.setString(2, batchId); ps.setString(3, stage); ps.setString(4, status); ps.setLong(5, rowsWritten); ps.setLong(6, durationMs)
+        ps.executeUpdate(); ps.close()
+      } finally conn.close()
+      pushPipelineRun(stage, status, runId)
+      true
+    } catch { case e: Exception => println(s"[warn] ops.pipeline_runs insert failed: ${e.getMessage}"); false }
+  }
 }

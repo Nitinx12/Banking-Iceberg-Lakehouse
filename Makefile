@@ -1,5 +1,7 @@
 # Banking Data Platform — Makefile (Architecture 16.1)
-# Primary: uv. Fallback: pip. Windows alternative: tasks.bat <target>
+# Heavy data tasks (Bronze/Silver/Gold) run Scala via sbt (Architecture 7.1: JVM shuffle for
+# 2M+ row tables). Quick monitoring/ops tasks run shell wrappers in scripts/sh/.
+# Windows alternative: tasks.bat <target>
 
 UV ?= uv
 PY ?= $(UV) run python
@@ -7,29 +9,51 @@ RUF ?= $(UV) run ruff
 
 ENV ?= dev
 DBT_SELECTOR ?= all
+BATCH_ID ?=
 
-.PHONY: help env setup hooks up down lint test test_fast ingest dbt_build dq dashboard tf_plan tf_apply seed_mongo docs clean
+SBT ?= sbt
+SBT_PROJECT := jobs.transform.scala
+HEAVY_NOTE := "requires sbt + jobs/transform/scala/build.sbt (Phase 7) — Python fallback: make ingest_py"
+
+.PHONY: help env setup hooks up down status health lint test test_fast \
+        ingest ingest_py silver silver_scala gold publish monitor dq dbt_build \
+        dashboard tf_plan tf_apply seed_mongo docs clean
 
 help:
-	@echo "Banking Data Platform — make targets (see tasks.bat on Windows)"
-	@echo "  make help              - this list"
-	@echo "  make env               - create .env from .env.example if missing"
-	@echo "  make setup             - uv sync + install hooks"
-	@echo "  make hooks             - set core.hooksPath to .githooks"
-	@echo "  make up PROFILE=core   - docker compose --profile <p> up -d"
-	@echo "  make down              - compose down"
-	@echo "  make lint              - ruff + yamllint + sqlfluff (if present)"
-	@echo "  make test              - pytest -q"
-	@echo "  make test_fast         - pytest -q -m 'not slow'"
-	@echo "  make ingest            - batch Bronze ingestion (scripts/sh/run_ingestion.sh)"
-	@echo "  make dbt_build         - dbt build (scripts/sh/run_dbt.sh $(DBT_SELECTOR))"
-	@echo "  make dq                - DQ checks + dbt test (scripts/sh/run_dq.sh)"
-	@echo "  make dashboard         - streamlit run dashboard/Home.py"
-	@echo "  make tf_plan ENV=dev   - terraform plan"
-	@echo "  make tf_apply ENV=dev  - terraform apply"
-	@echo "  make seed_mongo        - load sample dataset into local Mongo"
-	@echo "  make docs              - dbt docs + Data Docs"
-	@echo "  make clean             - remove caches"
+	@echo "Banking Data Platform — make targets"
+	@echo ""
+	@echo "HEAVY (Scala via sbt — Architecture 7.1):"
+	@echo "  make ingest             - Bronze batch ingestion (sbt runMain jobs.ingestion.scala.BronzeIngestion)"
+	@echo "  make ingest_py          - Bronze via Python fallback (jobs.ingestion.bronze)"
+	@echo "  make silver             - Silver for the 3 heavy tables (Scala: customers/transactions/card_txns)"
+	@echo "  make gold               - Gold star-schema build (Scala)"
+	@echo ""
+	@echo "QUICK MONITORING (shell — scripts/sh/):"
+	@echo "  make health             - service healthcheck (mongo/postgres/minio/airflow)"
+	@echo "  make status             - pipeline run status + watermark from ops tables"
+	@echo "  make monitor            - dbt run_results.json report + Pushgateway metrics"
+	@echo "  make dq                 - DQ checks + dbt test (fail-closed gate)"
+	@echo ""
+	@echo "PIPELINE (other):"
+	@echo "  make ingest_py          - Bronze via Python (uv, no sbt needed)"
+	@echo "  make publish            - publish Silver/Gold to Postgres serving"
+	@echo "  make dbt_build          - dbt build (scripts/sh/run_dbt.sh $(DBT_SELECTOR))"
+	@echo ""
+	@echo "INFRA / DEV:"
+	@echo "  make env                - create .env from .env.example if missing"
+	@echo "  make setup              - uv sync + install hooks"
+	@echo "  make hooks              - set core.hooksPath to .githooks"
+	@echo "  make up PROFILE=core    - docker compose --profile <p> up -d"
+	@echo "  make down               - compose down"
+	@echo "  make lint               - ruff + yamllint + sqlfluff (if present)"
+	@echo "  make test               - pytest -q"
+	@echo "  make test_fast          - pytest -q -m 'not slow'"
+	@echo "  make dashboard          - streamlit run dashboard/Home.py"
+	@echo "  make tf_plan ENV=dev    - terraform plan"
+	@echo "  make tf_apply ENV=dev   - terraform apply"
+	@echo "  make seed_mongo         - load sample dataset into local Mongo"
+	@echo "  make docs               - dbt docs + Data Docs"
+	@echo "  make clean              - remove caches"
 
 env:
 	@if [ ! -f .env ]; then cp .env.example .env; echo "created .env from .env.example — EDIT secrets"; else echo ".env exists"; fi
@@ -45,10 +69,65 @@ hooks:
 
 up:
 	docker compose --profile $(or $(PROFILE),core) up -d
-	@echo "up --profile $(or $(PROFILE),core) done; check: docker compose ps"
+	@echo "up --profile $(or $(PROFILE),core) done; check: make health"
 
 down:
 	docker compose down
+
+# ---------------------------------------------------------------- quick monitoring (shell)
+
+health:
+	bash scripts/sh/healthcheck.sh
+
+status:
+	@echo "== ops.pipeline_runs (latest 5) =="
+	docker exec $$(docker ps --filter name=banking_postgres -q | head -1) psql -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_WAREHOUSE_DB:-banking_dw} -c \
+	  "select run_id, stage, status, rows_written, finished_at from ops.pipeline_runs order by started_at desc limit 5" 2>/dev/null \
+	  || echo "postgres not reachable — make up first"
+	@echo "== watermarks =="
+	docker exec $$(docker ps --filter name=banking_postgres -q | head -1) psql -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_WAREHOUSE_DB:-banking_dw} -c \
+	  "select collection, watermark_value, updated_at from ops.watermarks order by collection" 2>/dev/null || true
+
+monitor:
+	@# dbt run_results.json -> console report + Pushgateway (Architecture 12.1)
+	@if [ -f dbt/banking_dbt/target/run_results.json ]; then \
+	  scala-cli run dbt/monitor/dbt-report.scala -- dbt/banking_dbt/target/run_results.json; \
+	else echo "no run_results.json yet — run make dbt_build first"; fi
+
+# ---------------------------------------------------------------- heavy tasks (Scala)
+
+ingest:
+	@echo "Bronze ingestion via Scala $(HEAVY_NOTE)"
+	$(SBT) ";project $(SBT_PROJECT);runMain jobs.ingestion.scala.BronzeIngestion"
+
+ingest_py:
+	@# Python fallback — proven CE path (Spark local mode), same idempotency contract
+	bash scripts/sh/run_ingestion.sh $(if $(BATCH_ID),--batch-id $(BATCH_ID),) \
+	  || $(PY) -m jobs.ingestion.bronze --all
+
+silver:
+	@echo "Silver (3 heavy tables) via Scala $(HEAVY_NOTE)"
+	$(SBT) ";project $(SBT_PROJECT);runMain jobs.transform.scala.SilverAll"
+
+silver_scala:
+	@# single table: make silver_scala TABLE=SilverTransactions
+	$(SBT) ";project $(SBT_PROJECT);runMain jobs.transform.scala.$(TABLE)"
+
+gold:
+	@echo "Gold build via Scala $(HEAVY_NOTE)"
+	$(SBT) ";project $(SBT_PROJECT);runMain jobs.transform.scala.GoldBuild"
+
+# ---------------------------------------------------------------- other pipeline tasks
+
+publish:
+	$(PY) -m jobs.publish.serving --table fct_transactions --run-id make-publish
+	$(PY) -m jobs.publish.serving --table dim_customer --run-id make-publish
+
+dbt_build:
+	bash scripts/sh/run_dbt.sh $(DBT_SELECTOR) || $(UV) run dbt build --project-dir dbt/banking_dbt --select $(DBT_SELECTOR)
+
+dq:
+	bash scripts/sh/run_dq.sh || $(PY) -m jobs.quality.checks
 
 lint:
 	$(RUF) check . || ruff check .
@@ -62,15 +141,6 @@ test:
 test_fast:
 	$(UV) run pytest -q -m "not slow" || pytest -q -m "not slow"
 
-ingest:
-	bash scripts/sh/run_ingestion.sh || $(PY) -m jobs.ingestion.bronze --all
-
-dbt_build:
-	bash scripts/sh/run_dbt.sh $(DBT_SELECTOR) || $(UV) run dbt build --project-dir dbt/banking_dbt --select $(DBT_SELECTOR)
-
-dq:
-	bash scripts/sh/run_dq.sh || $(PY) -m jobs.quality.checks
-
 dashboard:
 	$(UV) run streamlit run dashboard/Home.py || streamlit run dashboard/Home.py
 
@@ -83,8 +153,8 @@ tf_apply:
 	terraform -chdir=terraform/envs/$(ENV) apply -input=false
 
 seed_mongo:
-	@echo "Seeding Mongo — requires compose core up and dataset in data/ or contracts/"
-	$(PY) scripts/seed_mongo.py || echo "seed_mongo.py not yet implemented (Phase 0 task)"
+	@echo "Seeding Mongo — requires compose core up"
+	$(PY) scripts/seed_mongo.py
 
 docs:
 	$(UV) run dbt docs generate --project-dir dbt/banking_dbt --target-path docs_site || dbt docs generate --project-dir dbt/banking_dbt --target-path docs_site

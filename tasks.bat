@@ -1,6 +1,8 @@
 @echo off
 REM Banking Data Platform — tasks.bat mirror of Makefile (Architecture 16.1)
-REM Usage: tasks.bat help | env | setup | hooks | up core | down | lint | test | test_fast | seed_mongo | clean
+REM Heavy data tasks (Bronze/Silver/Gold) run Scala via sbt (Architecture 7.1: JVM shuffle
+REM for 2M+ row tables). Quick monitoring/ops tasks run shell/PowerShell wrappers.
+REM Usage: tasks.bat help | up | health | status | monitor | ingest | ingest_py | silver | ...
 setlocal EnableDelayedExpansion
 
 if "%~1"=="" goto help
@@ -13,10 +15,15 @@ if /I "%CMD%"=="setup" goto setup
 if /I "%CMD%"=="hooks" goto hooks
 if /I "%CMD%"=="up" goto up
 if /I "%CMD%"=="down" goto down
-if /I "%CMD%"=="lint" goto lint
-if /I "%CMD%"=="test" goto test
-if /I "%CMD%"=="test_fast" goto test_fast
+if /I "%CMD%"=="health" goto health
+if /I "%CMD%"=="status" goto status
+if /I "%CMD%"=="monitor" goto monitor
 if /I "%CMD%"=="ingest" goto ingest
+if /I "%CMD%"=="ingest_py" goto ingest_py
+if /I "%CMD%"=="silver" goto silver
+if /I "%CMD%"=="silver_scala" goto silver_scala
+if /I "%CMD%"=="gold" goto gold
+if /I "%CMD%"=="publish" goto publish
 if /I "%CMD%"=="dbt_build" goto dbt_build
 if /I "%CMD%"=="dq" goto dq
 if /I "%CMD%"=="dashboard" goto dashboard
@@ -30,17 +37,34 @@ goto help
 
 :help
 echo Banking Data Platform — tasks.bat targets
-echo   tasks.bat help              - this list
-echo   tasks.bat env               - create .env from .env.example if missing
-echo   tasks.bat setup             - uv sync + install hooks
-echo   tasks.bat hooks             - set core.hooksPath to .githooks
-echo   tasks.bat up [PROFILE]      - docker compose --profile ^<PROFILE^> up -d  (default core)
-echo   tasks.bat down              - compose down
-echo   tasks.bat lint              - ruff check + format
-echo   tasks.bat test              - pytest -q
-echo   tasks.bat test_fast         - pytest -q -m "not slow"
-echo   tasks.bat seed_mongo        - load sample dataset into local Mongo
-echo   tasks.bat clean             - remove caches
+echo.
+echo HEAVY (Scala via sbt — Architecture 7.1):
+echo   tasks.bat ingest        - Bronze ingestion (sbt, Phase 7 build.sbt required)
+echo   tasks.bat ingest_py     - Bronze via Python fallback (uv, no sbt needed)
+echo   tasks.bat silver        - Silver heavy tables (Scala: customers/transactions/card_txns)
+echo   tasks.bat gold          - Gold star-schema build (Scala)
+echo.
+echo QUICK MONITORING (shell/PowerShell — scripts/sh and scripts/ps1):
+echo   tasks.bat health        - service healthcheck (mongo/postgres/minio/airflow)
+echo   tasks.bat status        - pipeline run status + watermarks from ops tables
+echo   tasks.bat monitor       - dbt run_results.json report + Pushgateway metrics
+echo   tasks.bat dq            - DQ checks + dbt test (fail-closed gate)
+echo.
+echo PIPELINE (other):
+echo   tasks.bat publish       - publish Silver/Gold to Postgres serving
+echo   tasks.bat dbt_build     - dbt build (scripts\ps1\run_dbt.ps1)
+echo.
+echo INFRA / DEV:
+echo   tasks.bat env           - create .env from .env.example if missing
+echo   tasks.bat setup         - uv sync + install hooks
+echo   tasks.bat hooks         - set core.hooksPath to .githooks
+echo   tasks.bat up [PROFILE]  - docker compose --profile ^<PROFILE^> up -d  (default core)
+echo   tasks.bat down          - compose down
+echo   tasks.bat lint          - ruff check + format
+echo   tasks.bat test          - pytest -q
+echo   tasks.bat test_fast     - pytest -q -m "not slow"
+echo   tasks.bat seed_mongo    - load sample dataset into local Mongo
+echo   tasks.bat clean         - remove caches
 goto :eof
 
 :env
@@ -73,38 +97,73 @@ goto :eof
 set PROFILE=%ARG2%
 if "%PROFILE%"=="" set PROFILE=core
 docker compose --profile %PROFILE% up -d
-echo up --profile %PROFILE% done; check: docker compose ps
+echo up --profile %PROFILE% done; check: tasks.bat health
 goto :eof
 
 :down
 docker compose down
 goto :eof
 
-:lint
-where uv >nul 2>&1
-if %ERRORLEVEL%==0 (
-  uv run ruff check .
-  uv run ruff format --check .
+REM ---------------------------------------------------------------- quick monitoring (shell)
+
+:health
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ps1\healthcheck.ps1
+goto :eof
+
+:status
+echo == ops.pipeline_runs (latest 5) ==
+docker exec banking_postgres psql -U postgres -d banking_dw -c "select run_id, stage, status, rows_written, finished_at from ops.pipeline_runs order by started_at desc limit 5" 2>nul
+if %ERRORLEVEL% NEQ 0 echo postgres not reachable — tasks.bat up first
+echo == watermarks ==
+docker exec banking_postgres psql -U postgres -d banking_dw -c "select collection, watermark_value, updated_at from ops.watermarks order by collection" 2>nul
+goto :eof
+
+:monitor
+if exist dbt\banking_dbt\target\run_results.json (
+  scala-cli run dbt\monitor\dbt-report.scala -- dbt\banking_dbt\target\run_results.json
 ) else (
-  ruff check .
-  ruff format --check .
+  echo no run_results.json yet — run tasks.bat dbt_build first
 )
 goto :eof
 
-:test
-where uv >nul 2>&1
-if %ERRORLEVEL%==0 ( uv run pytest -q ) else ( pytest -q )
-goto :eof
-
-:test_fast
-where uv >nul 2>&1
-if %ERRORLEVEL%==0 ( uv run pytest -q -m "not slow" ) else ( pytest -q -m "not slow" )
-goto :eof
+REM ---------------------------------------------------------------- heavy tasks (Scala)
 
 :ingest
-echo Bronze ingestion — requires compose core up (scripts\ps1\run_ingestion.ps1)
+echo Bronze ingestion via Scala — requires sbt + jobs\transform\scala\build.sbt (Phase 7)
+sbt ";project jobs.transform.scala; runMain jobs.ingestion.scala.BronzeIngestion"
+goto :eof
+
+:ingest_py
+echo Bronze via Python fallback — proven CE path, same idempotency contract
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ps1\run_ingestion.ps1 %*
+goto :eof
+
+:silver
+echo Silver (3 heavy tables) via Scala — requires sbt + build.sbt (Phase 7)
+sbt ";project jobs.transform.scala; runMain jobs.transform.scala.SilverAll"
+goto :eof
+
+:silver_scala
+echo Single-table Silver via Scala — usage: tasks.bat silver_scala SilverTransactions
+sbt ";project jobs.transform.scala; runMain jobs.transform.scala.%ARG2%"
+goto :eof
+
+:gold
+echo Gold build via Scala — requires sbt + build.sbt (Phase 7)
+sbt ";project jobs.transform.scala; runMain jobs.transform.scala.GoldBuild"
+goto :eof
+
+REM ---------------------------------------------------------------- other pipeline tasks
+
+:publish
 where uv >nul 2>&1
-if %ERRORLEVEL%==0 ( uv run python -m jobs.ingestion.bronze --all ) else ( python -m jobs.ingestion.bronze --all )
+if %ERRORLEVEL%==0 (
+  uv run python -m jobs.publish.serving --table fct_transactions --run-id tasks-publish
+  uv run python -m jobs.publish.serving --table dim_customer --run-id tasks-publish
+) else (
+  python -m jobs.publish.serving --table fct_transactions --run-id tasks-publish
+  python -m jobs.publish.serving --table dim_customer --run-id tasks-publish
+)
 goto :eof
 
 :dbt_build
@@ -142,7 +201,7 @@ terraform -chdir=terraform\envs\%TFENV% apply -input=false
 goto :eof
 
 :seed_mongo
-echo Seeding Mongo — requires compose core up and dataset in data/
+echo Seeding Mongo — requires compose core up
 where uv >nul 2>&1
 if %ERRORLEVEL%==0 ( uv run python scripts\seed_mongo.py ) else ( python scripts\seed_mongo.py )
 goto :eof

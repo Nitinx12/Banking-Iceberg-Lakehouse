@@ -1,7 +1,7 @@
-"""jobs/common/spark.py — Spark session factory for Iceberg JDBC + MinIO (Architecture 6.1, Phase 1).
+"""jobs/common/spark.py - Spark session factory for Iceberg JDBC + MinIO (Architecture 6.1, Phase 1).
 
-CE path: local Spark with Iceberg JDBC catalog on postgres + S3A MinIO. On Databricks (paid) the same
-catalog name `banking` would point to Unity Catalog Iceberg; Silver/Gold fallback to Delta per ADR 003.
+CE path: Iceberg-everywhere via JDBC catalog `banking` on postgres + S3A MinIO (ADR 003 amended 2026-09-21).
+Silver/Gold stay USING iceberg on CE; Delta fallback only for paid Databricks Unity Catalog if required.
 """
 
 import os
@@ -44,7 +44,7 @@ def get_spark(app_name="banking_bronze") -> SparkSession:
             f"spark.sql.catalog.{cfg.ICEBERG_CATALOG_NAME}.jdbc.password",
             cfg.env("POSTGRES_PASSWORD", ""),
         )
-        # S3A / MinIO — for host runs S3_ENDPOINT must be localhost:9000 (not minio:9000)
+        # S3A / MinIO - for host runs S3_ENDPOINT must be localhost:9000 (not minio:9000)
         .config("spark.hadoop.fs.s3a.endpoint", cfg.S3_ENDPOINT)
         .config("spark.hadoop.fs.s3a.access.key", cfg.AWS_ACCESS_KEY_ID)
         .config("spark.hadoop.fs.s3a.secret.key", cfg.AWS_SECRET_ACCESS_KEY)
@@ -64,12 +64,25 @@ def get_spark(app_name="banking_bronze") -> SparkSession:
         .config("spark.pyspark.python", sys.executable)
         .config("spark.pyspark.driver.python", sys.executable)
     )
-    # JDBC driver for pg catalog — align Hadoop to Spark's bundled 3.3.4 (BulkDelete missing in 3.3 breaks 3.4/1.6 combo)
-    builder = builder.config(
-        "spark.jars.packages",
-        "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.postgresql:postgresql:42.7.4,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.780",
-    )
+    # JDBC driver for pg catalog - align Hadoop to Spark's bundled 3.3.4 (BulkDelete missing in 3.3 breaks 3.4/1.6 combo)
+    # Stable connection: if jars/*.jar present (from `make jars`) or SPARK_JARS env set, use local spark.jars
+    # so the run doesn't need Maven Central/Ivy on every invocation (offline-friendly).
+    import glob as _glob
+
+    local_jars = os.getenv("SPARK_JARS", "")
+    if not local_jars:
+        # auto-pick jars/*.jar if downloaded via scripts/sh/download_jars.sh
+        found = _glob.glob("jars/*.jar")
+        if found:
+            local_jars = ",".join(found)
+    if local_jars:
+        builder = builder.config("spark.jars", local_jars)
+    else:
+        builder = builder.config(
+            "spark.jars.packages",
+            "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2,org.postgresql:postgresql:42.7.4,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.780",
+        )
     spark = builder.getOrCreate()
     spark.sparkContext.setLogLevel("ERROR")
-    # suppress Ivy resolver noise on first run — jars already cached after first resolve
+    # suppress Ivy resolver noise on first run - jars already cached after first resolve
     return spark

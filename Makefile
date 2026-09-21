@@ -10,6 +10,7 @@ RUF ?= $(UV) run ruff
 ENV ?= dev
 DBT_SELECTOR ?= all
 BATCH_ID ?=
+JARS_DIR ?= jars
 
 SBT ?= sbt
 SBT_PROJECT := jobs.transform.scala
@@ -17,10 +18,13 @@ HEAVY_NOTE := "requires sbt + jobs/transform/scala/build.sbt (Phase 7) — Pytho
 
 .PHONY: help env setup hooks up down status health lint test test_fast \
         ingest ingest_py silver silver_scala gold publish monitor dq dbt_build \
-        dashboard tf_plan tf_apply seed_mongo docs clean
+        dashboard tf_plan tf_apply seed_mongo docs clean jars
 
 help:
 	@echo "Banking Data Platform — make targets"
+	@echo ""
+	@echo "JARS (stable/offline — Architecture 6.1/16.1):"
+	@echo "  make jars               - download pinned Spark/Iceberg JARs to jars/ for stable offline runs (needs curl, optional sbt)"
 	@echo ""
 	@echo "HEAVY (Scala via sbt — Architecture 7.1):"
 	@echo "  make ingest             - Bronze batch ingestion (sbt runMain jobs.ingestion.scala.BronzeIngestion)"
@@ -159,6 +163,9 @@ seed_mongo:
 docs:
 	$(UV) run dbt docs generate --project-dir dbt/banking_dbt --target-path docs_site || dbt docs generate --project-dir dbt/banking_dbt --target-path docs_site
 	@echo "dbt docs at dbt/banking_dbt/docs_site/index.html; GX Data Docs via make dq"
+
+jars:
+	bash scripts/sh/download_jars.sh
 
 clean:
 	rm -rf .pytest_cache .ruff_cache __pycache__ jobs/__pycache__ tests/__pycache__ .spark spark-warehouse logs/*.log 2>/dev/null || true

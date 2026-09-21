@@ -250,7 +250,7 @@ Default: a JDBC catalog stored in the `iceberg_catalog` PostgreSQL database. It 
 
 Alternatives for cloud: a REST catalog (Apache Polaris, Lakekeeper) or Unity Catalog.
 
-Decision to confirm early (ADR 3): Databricks is Delta native. Confirm that your workspace tier supports reading and writing Iceberg tables through Unity Catalog. If it does not, the fallback is Iceberg for Bronze and streaming outputs, Delta for Silver and Gold, with Iceberg reads enabled through UniForm where another engine needs them. Only the dbt target configuration changes.
+Decision (ADR 003, amended 2026-09-21): Databricks is Delta native. CE was validated **Iceberg-everywhere** via JDBC catalog `banking` on `iceberg_catalog` + MinIO — Bronze/Silver/Gold all `USING iceberg` with `MERGE` idempotent. The Delta-for-Silver/Gold fallback (Iceberg reads via UniForm, only `dbt-databricks` `type: delta` changes) remains a **paid-workspace-only** fallback if Unity Catalog requires it; it was not triggered on CE.
 
 ### 6.2 Storage layout
 
@@ -923,14 +923,16 @@ banking_data_platform/
 |---|---|---|---|---|
 | 1 | Batch first, Flink in a later phase | Streaming first | Faster value and lower operating cost, delays real time features | Accepted |
 | 2 | Iceberg JDBC catalog on PostgreSQL | REST catalog, Unity Catalog | Zero extra services, less multi engine governance | Accepted for local and dev |
-| 3 | Iceberg on Databricks through Unity Catalog | Delta for Silver and Gold with UniForm | Open format everywhere, but depends on workspace support | To confirm in Phase 1 |
-| 4 | dbt on Databricks, PostgreSQL as serving layer | dbt directly on PostgreSQL | Real scale and Spark semantics, one extra publish step | Accepted |
+| 3 | Iceberg on Databricks through Unity Catalog | Delta for Silver and Gold with UniForm | Open format everywhere, but depends on workspace support | Amended 2026-09-21: Iceberg-everywhere verified on CE (ADR 003) — Delta fallback only for paid Unity Catalog |
+| 4 | dbt on Databricks, PostgreSQL as serving layer | dbt directly on PostgreSQL | Real scale and Spark semantics, one extra publish step | Accepted — Gold via dbt SQL canonical; CE Spark mirrors same SQL (ADR 006) |
 | 5 | Great Expectations and dbt tests together | One tool only | Some overlap, but each is strongest at a different layer | Accepted |
 | 6 | Custom `sla_monitor` for SLA tracking | Airflow built in SLA | Version independent and data aware, small custom code | Accepted |
 | 7 | Native `.githooks` directory | `pre-commit` framework | No extra tool, less tool version management | Accepted |
 | 8 | Makefile plus `tasks.bat` mirror | Makefile only, Taskfile | Works on Windows without installs, two files to keep aligned | Accepted |
 | 9 | Flink CDC direct from MongoDB | Kafka or Redpanda buffer | Fewer moving parts, weaker replay | Revisit at Phase 7 |
 | 10 | Astronomer Cosmos for dbt in Airflow | BashOperator calling dbt | Per model tasks and retries, extra dependency | Accepted |
+| 11 | Gold build path: dbt SQL canonical, Spark CE mirroring | dbt-only on Databricks | Single source of truth + local verifiability | Accepted (ADR 006, M3 deviation documented) |
+| 12 | sbt heavy jobs deferred; Python fallback is CE path | Build sbt first | Unblocks MVP 0-4, Phase 7 scaffolds sbt | Known gap — `build.sbt` missing until Phase 7; `make ingest_py` is proven path |
 
 ---
 

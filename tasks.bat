@@ -31,6 +31,7 @@ if /I "%CMD%"=="tf_plan" goto tf_plan
 if /I "%CMD%"=="tf_apply" goto tf_apply
 if /I "%CMD%"=="seed_mongo" goto seed_mongo
 if /I "%CMD%"=="docs" goto docs
+if /I "%CMD%"=="jars" goto jars
 if /I "%CMD%"=="clean" goto clean
 echo Unknown target: %CMD%
 goto help
@@ -64,6 +65,7 @@ echo   tasks.bat lint          - ruff check + format
 echo   tasks.bat test          - pytest -q
 echo   tasks.bat test_fast     - pytest -q -m "not slow"
 echo   tasks.bat seed_mongo    - load sample dataset into local Mongo
+echo   tasks.bat jars          - download pinned Spark/Iceberg JARs to jars/ (stable offline)
 echo   tasks.bat clean         - remove caches
 goto :eof
 
@@ -211,6 +213,11 @@ echo dbt docs + Data Docs
 where uv >nul 2>&1
 if %ERRORLEVEL%==0 ( uv run dbt docs generate --project-dir dbt\banking_dbt --target-path docs_site ) else ( dbt docs generate --project-dir dbt\banking_dbt --target-path docs_site )
 echo dbt docs at dbt\banking_dbt\docs_site\index.html
+goto :eof
+
+:jars
+echo Downloading pinned Spark/Iceberg JARs to jars/ ...
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\ps1\Download-Jars.ps1
 goto :eof
 
 :clean

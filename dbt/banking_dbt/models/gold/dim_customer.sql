@@ -1,6 +1,7 @@
 {{ config(
     materialized='incremental',
-    unique_key='customer_sk'
+    unique_key='customer_sk',
+    contract={'enforced': true}
 ) }}
 -- Gold dim_customer SCD2 with surrogate key + unknown member -1 (Architecture 7.4)
 -- Surrogate: {{ dbt_utils.generate_surrogate_key(['customer_id', 'valid_from']) }} pattern

@@ -2,7 +2,8 @@ name: banking_dbt
 version: "1.0"
 config-version: 2
 profile: banking_dbt
-# CE path: local Spark/Databricks with Delta for Silver/Gold (ADR 003). Bronze stays Iceberg (jdbc banking).
+# CE path: Iceberg-everywhere via JDBC catalog `banking` (ADR 003 amended 2026-09-21). Silver/Gold USING iceberg proven on CE;
+# Delta fallback (`type: delta` + UniForm) only for paid Databricks Unity Catalog if needed.
 # Swap `type: databricks` to local `type: postgres` or `duckdb` for pure local dev if needed.
 
 model-paths: ["models"]

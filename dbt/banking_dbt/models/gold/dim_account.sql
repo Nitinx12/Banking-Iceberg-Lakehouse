@@ -1,4 +1,4 @@
-{{ config(materialized='incremental', unique_key='account_sk') }}
+{{ config(materialized='incremental', unique_key='account_sk', contract={'enforced': true}) }}
 -- dim_account SCD2
 with dedup as (
   select account_id, customer_id, branch_id, account_type, status, max(silver_loaded_at) as valid_from from {{ ref('silver_accounts') }} group by 1,2,3,4,5

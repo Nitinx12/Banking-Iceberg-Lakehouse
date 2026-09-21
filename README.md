@@ -1,10 +1,12 @@
 # HDFC Banking Data Platform — Lakehouse
 
-> Architecture: `Architecture.md` | Delivery plan: `PROJECT_PLAN.md` | Phase: **0 Foundations** (MVP = Phases 0-4)
+> Architecture: `Architecture.md` | Delivery plan: `PROJECT_PLAN.md` | Phase: **4 Serving & Streamlit — MVP complete (Phases 0-4 live-verified)** | Next: Phase 5 Observability hardening
+>
+> Phases 0-4 proven live: Contracts ×10, Bronze watermark/overlap/_batch_id idempotent (rerun = same counts), Silver ×10 (6 Python + 3 Scala heavy), Gold star SCD2 (6/9/20 counts), GX + gate (98% threshold), publish swap idempotent, backfill DAG. Iceberg-everywhere on CE (ADR 003 amended 2026-09-21) — Delta fallback not triggered.
 
 MongoDB (replicaSet `rs0`) → PySpark incremental batch (watermark + overlap, `_batch_id` idempotent) → Iceberg lakehouse (Bronze raw `_doc` + lineage, Silver typed/masked, Gold star SCD2) → PostgreSQL (`banking_dw: serving/ops/rt`) → Streamlit, orchestrated by Airflow, validated by GX/dbt, observed by Prometheus/Grafana.
 
-## Quick start (Phase 0)
+## Quick start (Phase 4 — MVP live)
 
 ```bash
 # 1. env
@@ -52,15 +54,17 @@ banking_data_platform/
 └── sql/init_postgres.sql serving/ops/rt + dq_results/freshness DDL
 ```
 
-## What I need from you to continue
+## What remains (Phase 5+)
 
-Per `PROJECT_PLAN.md:14` open questions — to close early:
+- Phase 5: Harden `sla_monitor` (freshness `warn_after 25h / error_after 26h` proven) + 5 Grafana dashboards as code + alert routing per severity. Runbooks below now per-alert (was 5-line stubs).
+- Phase 6: Terraform modules (`postgres`/`object_storage`/`monitoring` + paid `databricks`) + `cd.yml` promotion. CE verified Iceberg-everywhere; Delta fallback kept only for paid Unity Catalog.
+- Phase 7: Flink CDC (stretch) — `jobs/transform/scala/build.sbt` still missing; `make ingest/silver/gold` sbt targets are wired but expected to fail until Phase 7 scaffold. Python fallback (`make ingest_py`) is the proven CE path.
 
-1. **Sample documents** per actual Mongo collection (customers/accounts/transactions/branches/loans/cards) — or real volume/growth numbers
-2. **Databricks workspace tier** (CE vs trial/paid — decides ADR 3 Iceberg vs Delta fallback)
-3. **Cloud provider** for object storage + Terraform state (AWS/MinIO/GCP?)
-4. **Refresh cadence** per collection (daily/hourly/streaming)
-5. **Monthly cloud budget** ceiling
-6. **Alert routing** — Slack webhook + email for `SLACK_WEBHOOK_URL`/`ALERT_EMAIL_TO` in `.env`
+## Open questions (from PROJECT_PLAN.md:14 — partially closed)
 
-Next scaffold steps after you confirm: Spark session factory (Iceberg JDBC), Bronze DDL, `ops` DDL, batch ingestion job (Phase 1).
+1. ~~Sample documents~~ — closed via `tests/data/*.json` + profiling `docs/profiling.md` (10 collections, watermark `created_at`)
+2. ~~Databricks tier~~ — closed: CE selected, Iceberg-everywhere verified (ADR 003 amended 2026-09-21), paid workspace deferred to Phase 6
+3. Cloud provider for object storage + Terraform state (AWS/MinIO/GCP?) — local MinIO proven; cloud choice still open
+4. Refresh cadence per collection (daily/hourly/streaming) — daily batch proven; streaming Phase 7 stretch
+5. Monthly cloud budget ceiling — still open
+6. Alert routing — Slack webhook + email for `SLACK_WEBHOOK_URL`/`ALERT_EMAIL_TO` in `.env` — scaffolded in `monitoring/alertmanager/alertmanager.yml`, needs real webhook to prove

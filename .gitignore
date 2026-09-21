@@ -55,6 +55,10 @@ minio_data/
 Thumbs.db
 .ipynb_checkpoints/
 
+# Jars — offline Spark/Iceberg JARs (scripts/sh/download_jars.sh)
+jars/*.jar
+jars/*.zip
+
 # GX uncommitted
 gx/uncommitted/
 

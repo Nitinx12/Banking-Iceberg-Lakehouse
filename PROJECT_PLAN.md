@@ -39,7 +39,7 @@ This plan turns `architecture.md` into a sequence of deliverable phases. Each ph
 |---|---|---|
 | M1 | Local stack starts with one command and a secret commit is blocked | End of week 1 |
 | M2 | First data in Bronze on Iceberg, counts match MongoDB | End of week 3 |
-| M3 | Gold star schema built and tested on Databricks | End of week 6 |
+| M3 | Gold star schema built and tested on Databricks | End of week 6 | ← CE deviation (ADR 006): dbt SQL is canonical (Databricks path); CE verified via Spark mirroring same SQL on Iceberg JDBC (`banking.gold.*` counts proven live) — `dbt parse` stays Databricks path |
 | M4 | DQ gate stops a deliberately bad batch | End of week 8 |
 | M5 | Dashboard live on served data, MVP complete | End of week 10 |
 | M6 | SLOs measured, freshness alert proven | End of week 12 |

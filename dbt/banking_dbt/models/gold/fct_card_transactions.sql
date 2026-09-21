@@ -1,4 +1,4 @@
-{{ config(materialized='incremental', unique_key='card_txn_id', tags=['gold']) }}
+{{ config(materialized='incremental', unique_key='card_txn_id', tags=['gold'], contract={'enforced': true}) }}
 -- fct_card_transactions via Silver — FK to dim, no orphans
 select
   s.card_txn_id,

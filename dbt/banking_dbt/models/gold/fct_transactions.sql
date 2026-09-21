@@ -1,7 +1,8 @@
 {{ config(
     materialized='incremental',
     unique_key='transaction_id',
-    tags=['gold']
+    tags=['gold'],
+    contract={'enforced': true}
 ) }}
 -- fct_transactions incremental via Silver (not Bronze) — FK to dim_account, no orphans (Architecture 7.4)
 select
